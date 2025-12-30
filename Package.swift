@@ -14,15 +14,11 @@ let package = Package(
     targets: [
         .target(
             name: "ElevenLabsKit",
-            dependencies: [],
-            swiftSettings: [
-                .enableUpcomingFeature("StrictConcurrency"),
-            ]),
+            dependencies: []),
         .testTarget(
             name: "ElevenLabsKitTests",
             dependencies: ["ElevenLabsKit"],
             swiftSettings: [
-                .enableUpcomingFeature("StrictConcurrency"),
                 .enableExperimentalFeature("SwiftTesting"),
             ]),
     ])
