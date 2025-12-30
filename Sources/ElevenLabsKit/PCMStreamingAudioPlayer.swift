@@ -8,7 +8,10 @@ public final class PCMStreamingAudioPlayer {
 
     private let logger = Logger(subsystem: "com.steipete.clawdis", category: "talk.tts.pcm")
     private let playerFactory: () -> PCMPlayerNodeing
-    private var engine = AVAudioEngine()
+    private let engineFactory: () -> AVAudioEngine
+    private let startEngine: (AVAudioEngine) throws -> Void
+    private let stopEngine: (AVAudioEngine) -> Void
+    private var engine: AVAudioEngine
     private var player: PCMPlayerNodeing
     private var format: AVAudioFormat?
     private var pendingBuffers: Int = 0
@@ -17,12 +20,25 @@ public final class PCMStreamingAudioPlayer {
 
     public init() {
         self.playerFactory = { AVAudioPlayerNodeAdapter() }
+        self.engineFactory = { AVAudioEngine() }
+        self.startEngine = { engine in try engine.start() }
+        self.stopEngine = { engine in engine.stop() }
+        self.engine = self.engineFactory()
         self.player = self.playerFactory()
         self.player.attach(to: self.engine)
     }
 
-    init(playerFactory: @escaping () -> PCMPlayerNodeing) {
+    init(
+        playerFactory: @escaping () -> PCMPlayerNodeing,
+        engineFactory: @escaping () -> AVAudioEngine,
+        startEngine: @escaping (AVAudioEngine) throws -> Void,
+        stopEngine: @escaping (AVAudioEngine) -> Void
+    ) {
         self.playerFactory = playerFactory
+        self.engineFactory = engineFactory
+        self.startEngine = startEngine
+        self.stopEngine = stopEngine
+        self.engine = engineFactory()
         self.player = playerFactory()
         self.player.attach(to: self.engine)
     }
@@ -69,8 +85,8 @@ public final class PCMStreamingAudioPlayer {
 
     private func configure(format: AVAudioFormat) {
         if self.format?.sampleRate != format.sampleRate || self.format?.commonFormat != format.commonFormat {
-            self.engine.stop()
-            self.engine = AVAudioEngine()
+            self.stopEngine(self.engine)
+            self.engine = self.engineFactory()
             self.player = self.playerFactory()
             self.player.attach(to: self.engine)
         }
@@ -107,7 +123,7 @@ public final class PCMStreamingAudioPlayer {
 
         if !self.player.isPlaying {
             do {
-                try self.engine.start()
+                try self.startEngine(self.engine)
                 self.player.play()
             } catch {
                 self.logger.error("pcm engine start failed: \(error.localizedDescription, privacy: .public)")
@@ -130,7 +146,7 @@ public final class PCMStreamingAudioPlayer {
 
     private func stopInternal() {
         self.player.stop()
-        self.engine.stop()
+        self.stopEngine(self.engine)
         self.pendingBuffers = 0
         self.inputFinished = false
     }

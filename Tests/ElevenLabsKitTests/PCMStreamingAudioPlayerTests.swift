@@ -35,7 +35,12 @@ final class PCMStreamingAudioPlayerTests: XCTestCase {
     func testStopDuringPCMStreamReturnsInterruptedResult() async {
         let fakePlayer = FakePCMPlayerNode()
         fakePlayer.currentTimeSecondsValue = 1.25
-        let player = PCMStreamingAudioPlayer(playerFactory: { fakePlayer })
+        let player = PCMStreamingAudioPlayer(
+            playerFactory: { fakePlayer },
+            engineFactory: { AVAudioEngine() },
+            startEngine: { _ in },
+            stopEngine: { _ in }
+        )
         var continuation: AsyncThrowingStream<Data, Error>.Continuation?
         let stream = AsyncThrowingStream<Data, Error> { cont in
             continuation = cont
