@@ -7,15 +7,18 @@ public final class PCMStreamingAudioPlayer {
     public static let shared = PCMStreamingAudioPlayer()
 
     private let logger = Logger(subsystem: "com.steipete.clawdis", category: "talk.tts.pcm")
+    private let playerFactory: () -> PCMPlayerNodeing
     private var engine = AVAudioEngine()
-    private var player = AVAudioPlayerNode()
+    private var player: PCMPlayerNodeing
     private var format: AVAudioFormat?
     private var pendingBuffers: Int = 0
     private var inputFinished = false
     private var continuation: CheckedContinuation<StreamingPlaybackResult, Never>?
 
-    public init() {
-        self.engine.attach(self.player)
+    public init(playerFactory: @escaping () -> PCMPlayerNodeing = { AVAudioPlayerNodeAdapter() }) {
+        self.playerFactory = playerFactory
+        self.player = playerFactory()
+        self.player.attach(to: self.engine)
     }
 
     public func play(stream: AsyncThrowingStream<Data, Error>, sampleRate: Double) async -> StreamingPlaybackResult {
@@ -62,13 +65,11 @@ public final class PCMStreamingAudioPlayer {
         if self.format?.sampleRate != format.sampleRate || self.format?.commonFormat != format.commonFormat {
             self.engine.stop()
             self.engine = AVAudioEngine()
-            self.player = AVAudioPlayerNode()
-            self.engine.attach(self.player)
+            self.player = self.playerFactory()
+            self.player.attach(to: self.engine)
         }
         self.format = format
-        if self.engine.attachedNodes.contains(self.player) {
-            self.engine.connect(self.player, to: self.engine.mainMixerNode, format: format)
-        }
+        self.player.connect(to: self.engine, format: format)
     }
 
     private func enqueuePCM(_ data: Data, format: AVAudioFormat) async {
@@ -135,9 +136,6 @@ public final class PCMStreamingAudioPlayer {
     }
 
     private func currentTimeSeconds() -> Double? {
-        guard let nodeTime = self.player.lastRenderTime,
-              let playerTime = self.player.playerTime(forNodeTime: nodeTime)
-        else { return nil }
-        return Double(playerTime.sampleTime) / playerTime.sampleRate
+        self.player.currentTimeSeconds()
     }
 }

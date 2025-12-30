@@ -1,12 +1,41 @@
+import AVFoundation
 import XCTest
 @testable import ElevenLabsKit
 
+@MainActor
+private final class FakePCMPlayerNode: PCMPlayerNodeing {
+    var isPlaying = false
+    var currentTimeSecondsValue: Double?
+    var scheduledBuffers: [AVAudioPCMBuffer] = []
+    var onSchedule: (() -> Void)?
+
+    func attach(to engine: AVAudioEngine) {}
+    func connect(to engine: AVAudioEngine, format: AVAudioFormat) {}
+
+    func scheduleBuffer(_ buffer: AVAudioPCMBuffer) async {
+        self.scheduledBuffers.append(buffer)
+        self.onSchedule?()
+    }
+
+    func play() {
+        self.isPlaying = true
+    }
+
+    func stop() {
+        self.isPlaying = false
+    }
+
+    func currentTimeSeconds() -> Double? {
+        self.currentTimeSecondsValue
+    }
+}
+
 final class PCMStreamingAudioPlayerTests: XCTestCase {
     @MainActor
-    func testStopDuringPCMStreamReturnsInterruptedResult() async throws {
-        if ProcessInfo.processInfo.environment["CI"] == "true" {
-            throw XCTSkip("AVAudioEngine is unstable in CI runners.")
-        }
+    func testStopDuringPCMStreamReturnsInterruptedResult() async {
+        let fakePlayer = FakePCMPlayerNode()
+        fakePlayer.currentTimeSecondsValue = 1.25
+        let player = PCMStreamingAudioPlayer(playerFactory: { fakePlayer })
         var continuation: AsyncThrowingStream<Data, Error>.Continuation?
         let stream = AsyncThrowingStream<Data, Error> { cont in
             continuation = cont
@@ -15,15 +44,18 @@ final class PCMStreamingAudioPlayerTests: XCTestCase {
         }
 
         let task = Task { @MainActor in
-            await PCMStreamingAudioPlayer.shared.play(stream: stream, sampleRate: 44_100)
+            await player.play(stream: stream, sampleRate: 44_100)
         }
 
-        try? await Task.sleep(nanoseconds: 120_000_000)
-        let interruptedAt = PCMStreamingAudioPlayer.shared.stop()
+        for _ in 0..<5 where fakePlayer.scheduledBuffers.isEmpty {
+            await Task.yield()
+        }
+
+        let interruptedAt = player.stop()
         continuation?.finish()
 
         let result = await task.value
         XCTAssertFalse(result.finished)
-        XCTAssertNotNil(interruptedAt)
+        XCTAssertEqual(interruptedAt, 1.25)
     }
 }
