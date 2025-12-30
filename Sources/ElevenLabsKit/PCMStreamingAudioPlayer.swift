@@ -15,7 +15,13 @@ public final class PCMStreamingAudioPlayer {
     private var inputFinished = false
     private var continuation: CheckedContinuation<StreamingPlaybackResult, Never>?
 
-    public init(playerFactory: @escaping () -> PCMPlayerNodeing = { AVAudioPlayerNodeAdapter() }) {
+    public init() {
+        self.playerFactory = { AVAudioPlayerNodeAdapter() }
+        self.player = self.playerFactory()
+        self.player.attach(to: self.engine)
+    }
+
+    init(playerFactory: @escaping () -> PCMPlayerNodeing) {
         self.playerFactory = playerFactory
         self.player = playerFactory()
         self.player.attach(to: self.engine)
