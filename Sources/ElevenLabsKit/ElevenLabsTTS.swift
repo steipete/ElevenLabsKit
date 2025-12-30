@@ -168,6 +168,7 @@ public struct ElevenLabsTTSClient: Sendable {
                     let url = Self.streamingURL(
                         baseUrl: self.baseUrl,
                         voiceId: voiceId,
+                        outputFormat: request.outputFormat,
                         latencyTier: request.latencyTier)
                     let body = try JSONSerialization.data(withJSONObject: Self.buildPayload(request), options: [])
 
@@ -176,7 +177,9 @@ public struct ElevenLabsTTSClient: Sendable {
                     req.httpBody = body
                     req.timeoutInterval = self.requestTimeoutSeconds
                     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    req.setValue("audio/mpeg", forHTTPHeaderField: "Accept")
+                    if let accept = Self.acceptHeader(for: request.outputFormat) {
+                        req.setValue(accept, forHTTPHeaderField: "Accept")
+                    }
                     req.setValue(self.apiKey, forHTTPHeaderField: "xi-api-key")
 
                     let (bytes, response) = try await URLSession.shared.bytes(for: req)
@@ -193,7 +196,7 @@ public struct ElevenLabsTTSClient: Sendable {
                             NSLocalizedDescriptionKey: "ElevenLabs failed: \(http.statusCode) ct=\(contentType) \(message)",
                         ])
                     }
-                    if !contentType.contains("audio") {
+                    if !Self.isAudioContentType(contentType, outputFormat: request.outputFormat) {
                         let message = try await Self.readErrorBody(bytes: bytes)
                         throw NSError(domain: "ElevenLabsTTS", code: 415, userInfo: [
                             NSLocalizedDescriptionKey: "ElevenLabs returned non-audio ct=\(contentType) \(message)",
@@ -300,24 +303,48 @@ public struct ElevenLabsTTSClient: Sendable {
         return raw.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
     }
 
-    private static func streamingURL(baseUrl: URL, voiceId: String, latencyTier: Int?) -> URL {
+    private static func streamingURL(
+        baseUrl: URL,
+        voiceId: String,
+        outputFormat: String?,
+        latencyTier: Int?) -> URL
+    {
         var url = baseUrl
         url.appendPathComponent("v1")
         url.appendPathComponent("text-to-speech")
         url.appendPathComponent(voiceId)
         url.appendPathComponent("stream")
 
-        guard let latencyTier else { return url }
-        let latencyItem = URLQueryItem(
-            name: "optimize_streaming_latency",
-            value: "\(latencyTier)")
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return url
         }
         var items = components.queryItems ?? []
-        items.append(latencyItem)
-        components.queryItems = items
+        if let outputFormat = outputFormat?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !outputFormat.isEmpty
+        {
+            items.append(URLQueryItem(name: "output_format", value: outputFormat))
+        }
+        if let latencyTier {
+            items.append(URLQueryItem(name: "optimize_streaming_latency", value: "\(latencyTier)"))
+        }
+        components.queryItems = items.isEmpty ? nil : items
         return components.url ?? url
+    }
+
+    private static func acceptHeader(for outputFormat: String?) -> String? {
+        let normalized = (outputFormat ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized.hasPrefix("pcm_") { return "audio/pcm" }
+        if normalized.hasPrefix("mp3_") { return "audio/mpeg" }
+        return nil
+    }
+
+    private static func isAudioContentType(_ contentType: String, outputFormat: String?) -> Bool {
+        if contentType.contains("audio") { return true }
+        let normalized = (outputFormat ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized.hasPrefix("pcm_"), contentType.contains("octet-stream") {
+            return true
+        }
+        return false
     }
 
     private static func readErrorBody(bytes: URLSession.AsyncBytes) async throws -> String {
