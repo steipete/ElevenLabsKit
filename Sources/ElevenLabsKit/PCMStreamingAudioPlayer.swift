@@ -43,9 +43,9 @@ public final class PCMStreamingAudioPlayer {
                     for try await chunk in stream {
                         await self.enqueuePCM(chunk, format: format)
                     }
-                    await self.finishInput()
+                    self.finishInput()
                 } catch {
-                    await self.fail(error)
+                    self.fail(error)
                 }
             }
         }
@@ -91,7 +91,7 @@ public final class PCMStreamingAudioPlayer {
         self.pendingBuffers += 1
         Task { @MainActor [weak self] in
             guard let self else { return }
-            await self.player.scheduleBuffer(buffer)
+            self.player.scheduleBuffer(buffer)
             self.pendingBuffers = max(0, self.pendingBuffers - 1)
             if self.inputFinished && self.pendingBuffers == 0 {
                 self.finish(StreamingPlaybackResult(finished: true, interruptedAt: nil))
