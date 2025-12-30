@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
 import OSLog
 
@@ -89,13 +89,9 @@ public final class PCMStreamingAudioPlayer {
         }
 
         self.pendingBuffers += 1
-        self.player.scheduleBuffer(buffer)
-
-        let duration = Double(buffer.frameLength) / format.sampleRate
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let nanos = UInt64(max(0, duration) * 1_000_000_000)
-            try? await Task.sleep(nanoseconds: nanos)
+            await self.player.scheduleBuffer(buffer)
             self.pendingBuffers = max(0, self.pendingBuffers - 1)
             if self.inputFinished && self.pendingBuffers == 0 {
                 self.finish(StreamingPlaybackResult(finished: true, interruptedAt: nil))
