@@ -3,7 +3,7 @@ import XCTest
 
 final class PCMStreamingAudioPlayerTests: XCTestCase {
     @MainActor
-    func testStopDuringPCMStreamReturnsInterruptedResult() async {
+    func testStopDuringPCMStreamReturnsInterruptedResult() async throws {
         if ProcessInfo.processInfo.environment["CI"] == "true" {
             throw XCTSkip("AVAudioEngine is unstable in CI runners.")
         }
