@@ -2,12 +2,17 @@
 
 Swift helpers for ElevenLabs TTS on Apple platforms (iOS/macOS).
 
-## Features
+## What’s Included
 - ElevenLabs TTS client + voice listing
 - Streaming HTTP support
 - MP3 streaming playback (AudioQueue)
 - PCM streaming playback (AVAudioEngine + AVAudioPlayerNode)
 - Validation helpers for model-specific settings
+
+## Install (Swift Package Manager)
+```
+https://github.com/steipete/ElevenLabsKit.git
+```
 
 ## Quick Start
 ```swift
@@ -24,12 +29,12 @@ let result = await PCMStreamingAudioPlayer.shared.play(stream: stream, sampleRat
 ```
 
 ## Output Formats
-- Use `pcm_44100` for lowest latency playback on Apple platforms.
-- Use `mp3_44100_128` when you need MP3 streaming.
+- `pcm_44100`: lowest latency on Apple platforms.
+- `mp3_44100_128`: MP3 streaming when needed.
 
-## Development
-This package is designed to be used as a local path dependency during development.
-Later you can switch to a git URL and use `swift package edit` to point back to your local checkout when iterating.
+## Validation Notes
+- `stability` for `eleven_v3` is restricted to `0.0`, `0.5`, or `1.0`.
+- `latency_tier` is validated to `0..4`.
 
 ## License
 MIT
