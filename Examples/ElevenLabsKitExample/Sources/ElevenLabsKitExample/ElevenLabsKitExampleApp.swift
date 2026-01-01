@@ -63,7 +63,8 @@ private struct ContentView: View {
 
     @State private var didBootstrap = false
     @State private var streamTTFBSeconds: Double?
-    @State private var streamTotalSeconds: Double?
+    @State private var streamDownloadSeconds: Double?
+    @State private var streamPlaybackSeconds: Double?
     @State private var fetchRequestSeconds: Double?
 
     var body: some View {
@@ -127,8 +128,12 @@ private struct ContentView: View {
                             Text(formatSeconds(streamTTFBSeconds))
                                 .font(.system(.body, design: .monospaced))
                         }
-                        LabeledContent("Stream Total") {
-                            Text(formatSeconds(streamTotalSeconds))
+                        LabeledContent("Stream Download") {
+                            Text(formatSeconds(streamDownloadSeconds))
+                                .font(.system(.body, design: .monospaced))
+                        }
+                        LabeledContent("Stream Playback") {
+                            Text(formatSeconds(streamPlaybackSeconds))
                                 .font(.system(.body, design: .monospaced))
                         }
                         LabeledContent("Fetch Request") {
@@ -229,7 +234,8 @@ private struct ContentView: View {
         status = "Streaming…"
         defer { isWorking = false }
         streamTTFBSeconds = nil
-        streamTotalSeconds = nil
+        streamDownloadSeconds = nil
+        streamPlaybackSeconds = nil
 
         let clock = ContinuousClock()
         let start = clock.now
@@ -256,7 +262,12 @@ private struct ContentView: View {
             let replayStream = makeReplayStream(
                 iterator: iterator,
                 firstChunk: firstChunk,
-                stripWavHeader: detected == .wav
+                stripWavHeader: detected == .wav,
+                onStreamFinished: { [clock, start] in
+                    Task { @MainActor in
+                        streamDownloadSeconds = seconds(from: clock, since: start)
+                    }
+                }
             )
 
             switch detected {
@@ -271,7 +282,7 @@ private struct ContentView: View {
                 let result = await StreamingAudioPlayer.shared.play(stream: replayStream)
                 status = result.finished ? "Finished (MP3)" : "Stopped (MP3) at \(result.interruptedAt ?? 0)s"
             }
-            streamTotalSeconds = seconds(from: clock, since: start)
+            streamPlaybackSeconds = seconds(from: clock, since: start)
         } catch {
             handleRequestError(error)
         }
@@ -396,7 +407,8 @@ private enum AudioKind: String {
 private func makeReplayStream(
     iterator: AsyncThrowingStream<Data, Error>.Iterator,
     firstChunk: Data,
-    stripWavHeader: Bool
+    stripWavHeader: Bool,
+    onStreamFinished: (@Sendable () -> Void)? = nil
 ) -> AsyncThrowingStream<Data, Error> {
     AsyncThrowingStream { continuation in
         let sendableIterator = UnsafeSendableIterator(iterator: iterator)
@@ -436,8 +448,10 @@ private func makeReplayStream(
                 if headerStripped == false, headerBuffer.isEmpty == false {
                     continuation.yield(headerBuffer)
                 }
+                onStreamFinished?()
                 continuation.finish()
             } catch {
+                onStreamFinished?()
                 continuation.finish(throwing: error)
             }
         }
