@@ -26,6 +26,15 @@ struct ElevenLabsKitExampleApp: App {
     If you can hear this quickly, streaming is working as intended.
     """
     @State private var requestMode: RequestMode = .streaming
+    @State private var speedText: String = ""
+    @State private var stabilityText: String = ""
+    @State private var similarityText: String = ""
+    @State private var styleText: String = ""
+    @State private var speakerBoost: Bool = true
+    @State private var seedText: String = ""
+    @State private var normalizeOption: NormalizeOption = .defaultOption
+    @State private var languageText: String = ""
+    @State private var latencyTierText: String = ""
 
     @State private var voices: [ElevenLabsVoice] = []
     @State private var isWorking = false
@@ -41,6 +50,15 @@ struct ElevenLabsKitExampleApp: App {
                 outputFormat: $outputFormat,
                 text: $text,
                 requestMode: $requestMode,
+                speedText: $speedText,
+                stabilityText: $stabilityText,
+                similarityText: $similarityText,
+                styleText: $styleText,
+                speakerBoost: $speakerBoost,
+                seedText: $seedText,
+                normalizeOption: $normalizeOption,
+                languageText: $languageText,
+                latencyTierText: $latencyTierText,
                 voices: $voices,
                 isWorking: $isWorking,
                 status: $status,
@@ -59,6 +77,15 @@ private struct ContentView: View {
     @Binding var outputFormat: String
     @Binding var text: String
     @Binding var requestMode: ElevenLabsKitExampleApp.RequestMode
+    @Binding var speedText: String
+    @Binding var stabilityText: String
+    @Binding var similarityText: String
+    @Binding var styleText: String
+    @Binding var speakerBoost: Bool
+    @Binding var seedText: String
+    @Binding var normalizeOption: NormalizeOption
+    @Binding var languageText: String
+    @Binding var latencyTierText: String
 
     @Binding var voices: [ElevenLabsVoice]
     @Binding var isWorking: Bool
@@ -109,6 +136,53 @@ private struct ContentView: View {
                     TextEditor(text: $text)
                         .font(.system(.body, design: .monospaced))
                         .frame(minHeight: 140)
+                }
+
+                GroupBox("Voice Settings") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        LabeledContent("Speed (0.5–2.0)") {
+                            TextField("e.g. 1.0", text: $speedText)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        LabeledContent("Stability (0–1)") {
+                            TextField("e.g. 0.5", text: $stabilityText)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        LabeledContent("Similarity (0–1)") {
+                            TextField("e.g. 0.8", text: $similarityText)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        LabeledContent("Style (0–1)") {
+                            TextField("e.g. 0.2", text: $styleText)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        Toggle("Speaker Boost", isOn: $speakerBoost)
+                        LabeledContent("Seed (0…4294967295)") {
+                            TextField("optional", text: $seedText)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    }
+                }
+
+                GroupBox("Request Options") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        LabeledContent("Normalize") {
+                            Picker("Normalize", selection: $normalizeOption) {
+                                ForEach(NormalizeOption.allCases) { option in
+                                    Text(option.title).tag(option)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                        }
+                        LabeledContent("Language") {
+                            TextField("e.g. en", text: $languageText)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        LabeledContent("Latency Tier (0–4)") {
+                            TextField("optional", text: $latencyTierText)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    }
                 }
 
                 HStack(spacing: 10) {
@@ -248,7 +322,16 @@ private struct ContentView: View {
         let request = ElevenLabsTTSRequest(
             text: text,
             modelId: modelId,
-            outputFormat: normalizedOutput
+            outputFormat: normalizedOutput,
+            speed: parseDouble(speedText),
+            stability: parseDouble(stabilityText),
+            similarity: parseDouble(similarityText),
+            style: parseDouble(styleText),
+            speakerBoost: speakerBoost,
+            seed: parseUInt32(seedText),
+            normalize: normalizeOption.requestValue,
+            language: ElevenLabsTTSClient.validatedLanguage(languageText),
+            latencyTier: parseInt(latencyTierText)
         )
 
         let client = ElevenLabsTTSClient(apiKey: apiKey)
@@ -305,7 +388,16 @@ private struct ContentView: View {
         let request = ElevenLabsTTSRequest(
             text: text,
             modelId: modelId,
-            outputFormat: normalizedOutput
+            outputFormat: normalizedOutput,
+            speed: parseDouble(speedText),
+            stability: parseDouble(stabilityText),
+            similarity: parseDouble(similarityText),
+            style: parseDouble(styleText),
+            speakerBoost: speakerBoost,
+            seed: parseUInt32(seedText),
+            normalize: normalizeOption.requestValue,
+            language: ElevenLabsTTSClient.validatedLanguage(languageText),
+            latencyTier: parseInt(latencyTierText)
         )
 
         do {
@@ -373,6 +465,24 @@ private struct ContentView: View {
         }
         status = "Error: \(message)"
     }
+
+    private func parseDouble(_ text: String) -> Double? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return nil }
+        return Double(trimmed)
+    }
+
+    private func parseInt(_ text: String) -> Int? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return nil }
+        return Int(trimmed)
+    }
+
+    private func parseUInt32(_ text: String) -> UInt32? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false, let value = UInt32(trimmed) else { return nil }
+        return value
+    }
 }
 
 private enum AudioKind: String {
@@ -405,6 +515,33 @@ private enum AudioKind: String {
         }
 
         return .unknown
+    }
+}
+
+private enum NormalizeOption: String, CaseIterable, Identifiable {
+    case defaultOption
+    case auto
+    case on
+    case off
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .defaultOption: "Default"
+        case .auto: "Auto"
+        case .on: "On"
+        case .off: "Off"
+        }
+    }
+
+    var requestValue: String? {
+        switch self {
+        case .defaultOption: nil
+        case .auto: "auto"
+        case .on: "on"
+        case .off: "off"
+        }
     }
 }
 
