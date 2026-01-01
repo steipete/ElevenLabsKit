@@ -17,8 +17,5 @@ let package = Package(
             dependencies: []),
         .testTarget(
             name: "ElevenLabsKitTests",
-            dependencies: ["ElevenLabsKit"],
-            swiftSettings: [
-                .enableExperimentalFeature("SwiftTesting"),
-            ]),
+            dependencies: ["ElevenLabsKit"]),
     ])
