@@ -20,7 +20,11 @@ struct ElevenLabsKitExampleApp: App {
     @State private var voiceId: String = ""
     @State private var modelId: String = "eleven_v3"
     @State private var outputFormat: String = "mp3_44100_128"
-    @State private var text: String = "Hello from ElevenLabsKit"
+    @State private var text: String = """
+    Hello from ElevenLabsKit. This is a longer streaming test so you can hear audio start while the rest is still generating.
+    We’ll keep talking for a few sentences to make latency differences obvious, especially on higher streaming tiers.
+    If you can hear this quickly, streaming is working as intended.
+    """
     @State private var requestMode: RequestMode = .streaming
 
     @State private var voices: [ElevenLabsVoice] = []
