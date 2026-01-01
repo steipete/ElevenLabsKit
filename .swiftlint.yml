@@ -1,0 +1,31 @@
+included:
+  - Sources
+  - Tests
+  - Examples
+
+excluded:
+  - .build
+  - Packages
+  - DerivedData
+  - .swiftpm
+  - Examples/ElevenLabsKitExample/.build
+
+disabled_rules:
+  - trailing_whitespace
+  - line_length
+  - type_body_length
+  - file_length
+  - cyclomatic_complexity
+  - function_body_length
+  - identifier_name
+  - implicit_return
+  - opening_brace
+  - closure_parameter_position
+  - implicit_optional_initialization
+  - unused_setter_value
+
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - first_where
+  - sorted_imports

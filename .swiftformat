@@ -1,0 +1,14 @@
+--swift-version 6.2
+--indent 4
+--wraparguments before-first
+--wrapparameters before-first
+--binarygrouping none
+--octalgrouping none
+--hexgrouping none
+--commas inline
+--ranges no-space
+--nospaceoperators ...
+--self init-only
+--stripunusedargs always
+--exclude .build,Packages,DerivedData,.swiftpm,Examples/ElevenLabsKitExample/.build
+
