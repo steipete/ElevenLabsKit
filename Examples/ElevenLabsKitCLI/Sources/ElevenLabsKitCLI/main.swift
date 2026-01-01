@@ -54,17 +54,23 @@ struct ElevenLabsKitCLI {
                 try await streamAndMaybePlay(
                     client: client,
                     request: request,
-                    voiceId: voiceId,
-                    play: args.play,
-                    outputPath: args.outputPath
+                    options: PlaybackOptions(
+                        voiceId: voiceId,
+                        play: args.play,
+                        outputPath: args.outputPath,
+                        metrics: args.metrics
+                    )
                 )
             } else {
                 try await fetchAndMaybePlay(
                     client: client,
                     request: request,
-                    voiceId: voiceId,
-                    play: args.play,
-                    outputPath: args.outputPath
+                    options: PlaybackOptions(
+                        voiceId: voiceId,
+                        play: args.play,
+                        outputPath: args.outputPath,
+                        metrics: args.metrics
+                    )
                 )
             }
         }
@@ -86,6 +92,7 @@ private struct CLIArguments {
     var latencyTier: Int?
     var stream: Bool
     var play: Bool
+    var metrics: Bool
     var outputPath: String?
     var search: String?
     var limit: Int?
@@ -111,6 +118,7 @@ private struct CLIArguments {
             latencyTier: nil,
             stream: true,
             play: true,
+            metrics: false,
             outputPath: nil,
             search: nil,
             limit: nil,
@@ -141,6 +149,8 @@ private struct CLIArguments {
                 parsed.play = true
             case "--no-play":
                 parsed.play = false
+            case "--metrics":
+                parsed.metrics = true
             case "-o", "--output":
                 parsed.outputPath = try requireValue(&args, flag: arg)
             case "--search":
@@ -179,6 +189,7 @@ private struct CLIArguments {
           --latency-tier <n>     Optimize streaming latency (0-4)
           --stream / --no-stream Stream audio (default: --stream)
           --play / --no-play     Play audio (default: --play)
+          --metrics              Print timing + byte metrics to stderr
           -o, --output <path>    Write audio to file
 
         Voices:
@@ -247,23 +258,43 @@ private func resolveOutputFormat(from args: CLIArguments) -> String? {
     return nil
 }
 
+private func seconds(from clock: ContinuousClock, since start: ContinuousClock.Instant) -> Double {
+    let duration = clock.now - start
+    let components = duration.components
+    return Double(components.seconds) + Double(components.attoseconds) / 1_000_000_000_000_000_000
+}
+
+private func formatSeconds(_ value: Double?) -> String {
+    guard let value else { return "—" }
+    return String(format: "%.2fs", value)
+}
+
 private func writeFile(data: Data, path: String) throws {
     let url = URL(fileURLWithPath: path)
     try data.write(to: url, options: [.atomic])
 }
 
+private struct PlaybackOptions {
+    let voiceId: String
+    let play: Bool
+    let outputPath: String?
+    let metrics: Bool
+}
+
 private func fetchAndMaybePlay(
     client: ElevenLabsTTSClient,
     request: ElevenLabsTTSRequest,
-    voiceId: String,
-    play: Bool,
-    outputPath: String?
+    options: PlaybackOptions
 ) async throws {
-    let data = try await client.synthesize(voiceId: voiceId, request: request)
-    if let outputPath {
+    let clock = ContinuousClock()
+    let start = clock.now
+
+    let data = try await client.synthesize(voiceId: options.voiceId, request: request)
+    let requestSeconds = seconds(from: clock, since: start)
+    if let outputPath = options.outputPath {
         try writeFile(data: data, path: outputPath)
     }
-    guard play else { return }
+    guard options.play else { return }
 
     let normalizedOutput = ElevenLabsTTSClient.validatedOutputFormat(request.outputFormat)
         ?? request.outputFormat?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -289,20 +320,32 @@ private func fetchAndMaybePlay(
         }
         _ = await StreamingAudioPlayer.shared.play(stream: stream)
     }
+
+    if options.metrics {
+        let bytes = data.count
+        let message = String(format: "fetch_request_seconds=%.2f bytes=%d", requestSeconds, bytes)
+        fputs("\(message)\n", stderr)
+    }
 }
 
 private func streamAndMaybePlay(
     client: ElevenLabsTTSClient,
     request: ElevenLabsTTSRequest,
-    voiceId: String,
-    play: Bool,
-    outputPath: String?
+    options: PlaybackOptions
 ) async throws {
-    let stream = client.streamSynthesize(voiceId: voiceId, request: request)
-    let outputSink = try outputPath.map { try FileSink(path: $0) }
+    let clock = ContinuousClock()
+    let start = clock.now
+    let streamMetrics = options.metrics ? StreamMetrics() : nil
 
-    if play == false {
-        try await drain(stream: stream, sink: outputSink)
+    let stream = client.streamSynthesize(voiceId: options.voiceId, request: request)
+    let outputSink = try options.outputPath.map { try FileSink(path: $0) }
+
+    if options.play == false {
+        try await drain(stream: stream, sink: outputSink, metrics: streamMetrics, start: start, clock: clock)
+        if let streamMetrics {
+            let snapshot = await streamMetrics.snapshot()
+            printStreamMetrics(snapshot)
+        }
         return
     }
 
@@ -310,16 +353,32 @@ private func streamAndMaybePlay(
     guard let firstChunk = try await iterator.next() else {
         throw CLIError("No audio returned.")
     }
+    if let streamMetrics {
+        await streamMetrics.setTTFB(seconds(from: clock, since: start))
+    }
 
     let normalizedOutput = ElevenLabsTTSClient.validatedOutputFormat(request.outputFormat)
         ?? request.outputFormat?.trimmingCharacters(in: .whitespacesAndNewlines)
         ?? ""
     let detected = AudioKind.detect(from: firstChunk, requestedOutput: normalizedOutput)
+
+    let onChunk: (@Sendable (Int) async -> Void)?
+    let onStreamFinished: (@Sendable () async -> Void)?
+    if let streamMetrics {
+        onChunk = { bytes in await streamMetrics.addBytes(bytes) }
+        onStreamFinished = { await streamMetrics.setDownload(seconds(from: clock, since: start)) }
+    } else {
+        onChunk = nil
+        onStreamFinished = nil
+    }
+
     let replayStream = makeReplayStream(
         iterator: iterator,
         firstChunk: firstChunk,
         stripWavHeader: detected == .wav,
-        sink: outputSink
+        sink: outputSink,
+        onChunk: onChunk,
+        onStreamFinished: onStreamFinished
     )
 
     switch detected {
@@ -331,13 +390,34 @@ private func streamAndMaybePlay(
     case .mp3, .unknown:
         _ = await StreamingAudioPlayer.shared.play(stream: replayStream)
     }
+
+    if let streamMetrics {
+        await streamMetrics.setPlayback(seconds(from: clock, since: start))
+        let snapshot = await streamMetrics.snapshot()
+        printStreamMetrics(snapshot)
+    }
 }
 
-private func drain(stream: AsyncThrowingStream<Data, Error>, sink: FileSink?) async throws {
+private func drain(
+    stream: AsyncThrowingStream<Data, Error>,
+    sink: FileSink?,
+    metrics: StreamMetrics?,
+    start: ContinuousClock.Instant,
+    clock: ContinuousClock
+) async throws {
+    var didSetTTFB = false
     for try await chunk in stream {
         if let sink { await sink.write(chunk) }
+        if let metrics { await metrics.addBytes(chunk.count) }
+        if didSetTTFB == false, let metrics {
+            didSetTTFB = true
+            await metrics.setTTFB(seconds(from: clock, since: start))
+        }
     }
     if let sink { await sink.close() }
+    if let metrics {
+        await metrics.setDownload(seconds(from: clock, since: start))
+    }
 }
 
 private func playWithAVAudioPlayer(_ data: Data) async throws {
@@ -385,7 +465,9 @@ private func makeReplayStream(
     iterator: AsyncThrowingStream<Data, Error>.Iterator,
     firstChunk: Data,
     stripWavHeader: Bool,
-    sink: FileSink?
+    sink: FileSink?,
+    onChunk: (@Sendable (Int) async -> Void)? = nil,
+    onStreamFinished: (@Sendable () async -> Void)? = nil
 ) -> AsyncThrowingStream<Data, Error> {
     AsyncThrowingStream { continuation in
         let sendableIterator = UnsafeSendableIterator(iterator: iterator)
@@ -407,6 +489,7 @@ private func makeReplayStream(
 
             do {
                 if let sink { await sink.write(firstChunk) }
+                if let onChunk { await onChunk(firstChunk.count) }
 
                 if stripWavHeader {
                     headerBuffer.append(firstChunk)
@@ -417,6 +500,7 @@ private func makeReplayStream(
 
                 while let chunk = try await iterator.next() {
                     if let sink { await sink.write(chunk) }
+                    if let onChunk { await onChunk(chunk.count) }
 
                     if stripWavHeader, headerStripped == false {
                         headerBuffer.append(chunk)
@@ -429,9 +513,11 @@ private func makeReplayStream(
                 if headerStripped == false, headerBuffer.isEmpty == false {
                     continuation.yield(headerBuffer)
                 }
+                if let onStreamFinished { await onStreamFinished() }
                 if let sink { await sink.close() }
                 continuation.finish()
             } catch {
+                if let onStreamFinished { await onStreamFinished() }
                 if let sink { await sink.close() }
                 continuation.finish(throwing: error)
             }
@@ -441,6 +527,55 @@ private func makeReplayStream(
 
 private struct UnsafeSendableIterator: @unchecked Sendable {
     var iterator: AsyncThrowingStream<Data, Error>.Iterator
+}
+
+private actor StreamMetrics {
+    private var bytes: Int = 0
+    private var ttfbSeconds: Double?
+    private var downloadSeconds: Double?
+    private var playbackSeconds: Double?
+
+    func addBytes(_ value: Int) {
+        bytes += value
+    }
+
+    func setTTFB(_ value: Double) {
+        if ttfbSeconds == nil {
+            ttfbSeconds = value
+        }
+    }
+
+    func setDownload(_ value: Double) {
+        downloadSeconds = value
+    }
+
+    func setPlayback(_ value: Double) {
+        playbackSeconds = value
+    }
+
+    func snapshot() -> StreamMetricsSnapshot {
+        StreamMetricsSnapshot(
+            bytes: bytes,
+            ttfbSeconds: ttfbSeconds,
+            downloadSeconds: downloadSeconds,
+            playbackSeconds: playbackSeconds
+        )
+    }
+}
+
+private struct StreamMetricsSnapshot {
+    let bytes: Int
+    let ttfbSeconds: Double?
+    let downloadSeconds: Double?
+    let playbackSeconds: Double?
+}
+
+private func printStreamMetrics(_ metrics: StreamMetricsSnapshot) {
+    let ttfb = formatSeconds(metrics.ttfbSeconds)
+    let download = formatSeconds(metrics.downloadSeconds)
+    let playback = formatSeconds(metrics.playbackSeconds)
+    let message = "stream_ttfb=\(ttfb) stream_download=\(download) stream_playback=\(playback) bytes=\(metrics.bytes)"
+    fputs("\(message)\n", stderr)
 }
 
 private actor FileSink {
