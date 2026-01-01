@@ -16,5 +16,7 @@ jobs:
         run: |
           xcodebuild -version
           xcrun swift --version
+      - name: Assert Swift 6.2
+        run: swift --version | grep -E "Swift version 6\\.2"
       - name: Swift test
-        run: swift test
+        run: swift test -Xswiftc -warnings-as-errors
