@@ -19,7 +19,7 @@ struct ElevenLabsKitExampleApp: App {
     @State private var apiKey: String = ""
     @State private var voiceId: String = ""
     @State private var modelId: String = "eleven_v3"
-    @State private var outputFormat: String = "pcm_44100"
+    @State private var outputFormat: String = "mp3_44100_128"
     @State private var text: String = "Hello from ElevenLabsKit"
     @State private var requestMode: RequestMode = .streaming
 
@@ -191,7 +191,7 @@ private struct ContentView: View {
                 voiceId = voices.first?.voiceId ?? voiceId
             }
         } catch {
-            status = "Error: \(error.localizedDescription)"
+            handleRequestError(error)
         }
     }
 
@@ -246,7 +246,7 @@ private struct ContentView: View {
                 status = result.finished ? "Finished (MP3)" : "Stopped (MP3) at \(result.interruptedAt ?? 0)s"
             }
         } catch {
-            status = "Error: \(error.localizedDescription)"
+            handleRequestError(error)
         }
     }
 
@@ -304,6 +304,16 @@ private struct ContentView: View {
         audioPlayer = nil
         isWorking = false
         status = "Stopped"
+    }
+
+    private func handleRequestError(_ error: Error) {
+        let message = error.localizedDescription
+        if message.contains("output_format_not_allowed"), outputFormat.lowercased().hasPrefix("pcm_") {
+            outputFormat = "mp3_44100_128"
+            status = "PCM requires Pro. Switched to mp3_44100_128."
+            return
+        }
+        status = "Error: \(message)"
     }
 }
 
