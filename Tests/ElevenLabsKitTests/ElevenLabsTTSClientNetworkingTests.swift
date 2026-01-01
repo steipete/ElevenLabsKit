@@ -154,7 +154,7 @@ import Testing
 
         #expect(requestedURL?.absoluteString.contains("output_format=mp3_44100_128") == true)
         #expect(requestedURL?.absoluteString.contains("optimize_streaming_latency=4") == true)
-        #expect(chunks.first?.count == 8192)
+        #expect(chunks.first?.count == 2048)
         #expect(chunks.reduce(0) { $0 + $1.count } == 10000)
     }
 }

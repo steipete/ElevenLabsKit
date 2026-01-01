@@ -172,6 +172,7 @@ public struct ElevenLabsTTSClient: Sendable {
         request: ElevenLabsTTSRequest
     ) -> AsyncThrowingStream<Data, Error> {
         AsyncThrowingStream { continuation in
+            let chunkSize = 2048
             let task = Task {
                 do {
                     let url = Self.streamingURL(
@@ -214,10 +215,10 @@ public struct ElevenLabsTTSClient: Sendable {
                     }
 
                     var buffer = Data()
-                    buffer.reserveCapacity(16384)
+                    buffer.reserveCapacity(chunkSize)
                     for try await byte in bytes {
                         buffer.append(byte)
-                        if buffer.count >= 8192 {
+                        if buffer.count >= chunkSize {
                             continuation.yield(buffer)
                             buffer.removeAll(keepingCapacity: true)
                         }
