@@ -64,7 +64,7 @@ struct ElevenLabsKitExampleApp: App {
                 status: $status,
                 audioPlayer: $audioPlayer
             )
-            .frame(minWidth: 960, minHeight: 760)
+            .frame(minWidth: 960, minHeight: 920)
         }
     }
 }
