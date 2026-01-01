@@ -17,4 +17,4 @@ jobs:
           xcodebuild -version
           xcrun swift --version
       - name: Swift test
-        run: xcrun swift test
+        run: swift test
