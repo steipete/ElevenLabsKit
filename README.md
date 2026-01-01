@@ -9,6 +9,10 @@ Swift helpers for ElevenLabs TTS on Apple platforms (iOS/macOS).
 - PCM streaming playback (AVAudioEngine + AVAudioPlayerNode)
 - Validation helpers for model-specific settings
 
+## Requirements
+- iOS 17+
+- macOS 15+
+
 ## Install (Swift Package Manager)
 ```
 https://github.com/steipete/ElevenLabsKit.git
@@ -25,16 +29,29 @@ let request = ElevenLabsTTSRequest(
     outputFormat: "pcm_44100")
 
 let stream = client.streamSynthesize(voiceId: "<voice-id>", request: request)
-let result = await PCMStreamingAudioPlayer.shared.play(stream: stream, sampleRate: 44_100)
+let sampleRate = TalkTTSValidation.pcmSampleRate(from: request.outputFormat) ?? 44_100
+let result = await PCMStreamingAudioPlayer.shared.play(stream: stream, sampleRate: sampleRate)
+```
+
+## Non-Streaming (Fetch)
+```swift
+let data = try await client.synthesize(voiceId: "<voice-id>", request: request)
 ```
 
 ## Output Formats
 - `pcm_44100`: lowest latency on Apple platforms.
 - `mp3_44100_128`: MP3 streaming when needed.
 
+## Playback Choices
+- MP3: `StreamingAudioPlayer.shared.play(stream:)`
+- PCM: `PCMStreamingAudioPlayer.shared.play(stream:sampleRate:)`
+
 ## Validation Notes
 - `stability` for `eleven_v3` is restricted to `0.0`, `0.5`, or `1.0`.
-- `latency_tier` is validated to `0..4`.
+- `latencyTier` is validated to `0..4`.
+
+## Example App (SwiftUI)
+Open `Examples/ElevenLabsKitExample/Package.swift` in Xcode and run the executable target.
 
 ## License
 MIT
