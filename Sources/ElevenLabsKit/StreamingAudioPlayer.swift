@@ -12,17 +12,130 @@ public struct StreamingPlaybackResult: Sendable {
     }
 }
 
+struct AudioToolboxClient: Sendable {
+    var fileStreamOpen: @Sendable (
+        UnsafeMutableRawPointer?,
+        AudioFileStream_PropertyListenerProc,
+        AudioFileStream_PacketsProc,
+        AudioFileTypeID,
+        UnsafeMutablePointer<AudioFileStreamID?>) -> OSStatus
+
+    var fileStreamParseBytes: @Sendable (
+        AudioFileStreamID,
+        UInt32,
+        UnsafeRawPointer?,
+        AudioFileStreamParseFlags) -> OSStatus
+
+    var fileStreamGetPropertyInfo: @Sendable (
+        AudioFileStreamID,
+        AudioFileStreamPropertyID,
+        UnsafeMutablePointer<UInt32>,
+        UnsafeMutablePointer<DarwinBoolean>) -> OSStatus
+
+    var fileStreamGetProperty: @Sendable (
+        AudioFileStreamID,
+        AudioFileStreamPropertyID,
+        UnsafeMutablePointer<UInt32>,
+        UnsafeMutableRawPointer) -> OSStatus
+
+    var fileStreamClose: @Sendable (AudioFileStreamID) -> OSStatus
+
+    var queueNewOutput: @Sendable (
+        UnsafeMutablePointer<AudioStreamBasicDescription>,
+        AudioQueueOutputCallback,
+        UnsafeMutableRawPointer?,
+        CFRunLoop?,
+        CFString?,
+        UInt32,
+        UnsafeMutablePointer<AudioQueueRef?>) -> OSStatus
+
+    var queueAddPropertyListener: @Sendable (
+        AudioQueueRef,
+        AudioQueuePropertyID,
+        AudioQueuePropertyListenerProc,
+        UnsafeMutableRawPointer?) -> OSStatus
+
+    var queueAllocateBuffer: @Sendable (AudioQueueRef, UInt32, UnsafeMutablePointer<AudioQueueBufferRef?>) -> OSStatus
+    var queueEnqueueBuffer: @Sendable (
+        AudioQueueRef,
+        AudioQueueBufferRef,
+        UInt32,
+        UnsafePointer<AudioStreamPacketDescription>?) -> OSStatus
+    var queueStart: @Sendable (AudioQueueRef, UnsafePointer<AudioTimeStamp>?) -> OSStatus
+    var queueStop: @Sendable (AudioQueueRef, Bool) -> OSStatus
+    var queueDispose: @Sendable (AudioQueueRef, Bool) -> OSStatus
+    var queueSetProperty: @Sendable (AudioQueueRef, AudioQueuePropertyID, UnsafeRawPointer, UInt32) -> OSStatus
+    var queueGetCurrentTime: @Sendable (
+        AudioQueueRef,
+        AudioQueueTimelineRef?,
+        UnsafeMutablePointer<AudioTimeStamp>,
+        UnsafeMutablePointer<DarwinBoolean>?) -> OSStatus
+    var queueGetProperty: @Sendable (
+        AudioQueueRef,
+        AudioQueuePropertyID,
+        UnsafeMutableRawPointer,
+        UnsafeMutablePointer<UInt32>) -> OSStatus
+
+    static let live = AudioToolboxClient(
+        fileStreamOpen: { clientData, propertyProc, packetsProc, fileType, outStream in
+            AudioFileStreamOpen(clientData, propertyProc, packetsProc, fileType, outStream)
+        },
+        fileStreamParseBytes: { stream, count, data, flags in
+            AudioFileStreamParseBytes(stream, count, data, flags)
+        },
+        fileStreamGetPropertyInfo: { stream, propertyID, size, writable in
+            AudioFileStreamGetPropertyInfo(stream, propertyID, size, writable)
+        },
+        fileStreamGetProperty: { stream, propertyID, size, outData in
+            AudioFileStreamGetProperty(stream, propertyID, size, outData)
+        },
+        fileStreamClose: { stream in
+            AudioFileStreamClose(stream)
+        },
+        queueNewOutput: { format, callback, userData, runLoop, runLoopMode, flags, outQueue in
+            AudioQueueNewOutput(format, callback, userData, runLoop, runLoopMode, flags, outQueue)
+        },
+        queueAddPropertyListener: { queue, propertyID, listener, userData in
+            AudioQueueAddPropertyListener(queue, propertyID, listener, userData)
+        },
+        queueAllocateBuffer: { queue, size, outBuffer in
+            AudioQueueAllocateBuffer(queue, size, outBuffer)
+        },
+        queueEnqueueBuffer: { queue, buffer, packetCount, packetDescs in
+            AudioQueueEnqueueBuffer(queue, buffer, packetCount, packetDescs)
+        },
+        queueStart: { queue, startTime in
+            AudioQueueStart(queue, startTime)
+        },
+        queueStop: { queue, immediate in
+            AudioQueueStop(queue, immediate)
+        },
+        queueDispose: { queue, immediate in
+            AudioQueueDispose(queue, immediate)
+        },
+        queueSetProperty: { queue, propertyID, data, size in
+            AudioQueueSetProperty(queue, propertyID, data, size)
+        },
+        queueGetCurrentTime: { queue, timeline, outTimeStamp, outDiscontinuity in
+            AudioQueueGetCurrentTime(queue, timeline, outTimeStamp, outDiscontinuity)
+        },
+        queueGetProperty: { queue, propertyID, outData, ioDataSize in
+            AudioQueueGetProperty(queue, propertyID, outData, ioDataSize)
+        }
+    )
+}
+
 @MainActor
 public final class StreamingAudioPlayer: NSObject {
     public static let shared = StreamingAudioPlayer()
 
     private let logger = Logger(subsystem: "com.steipete.clawdis", category: "talk.tts.stream")
-    private var playback: Playback?
+    private var playback: StreamingAudioPlayback?
 
     public func play(stream: AsyncThrowingStream<Data, Error>) async -> StreamingPlaybackResult {
         self.stopInternal()
 
-        let playback = Playback(logger: self.logger)
+        let playback = StreamingAudioPlayback(logger: self.logger)
         self.playback = playback
 
         return await withCheckedContinuation { continuation in
@@ -55,20 +168,21 @@ public final class StreamingAudioPlayer: NSObject {
         self.finish(playback: playback, result: StreamingPlaybackResult(finished: false, interruptedAt: interruptedAt))
     }
 
-    private func finish(playback: Playback, result: StreamingPlaybackResult) {
+    private func finish(playback: StreamingAudioPlayback, result: StreamingPlaybackResult) {
         playback.finish(result)
         guard self.playback === playback else { return }
         self.playback = nil
     }
 }
 
-private final class Playback: @unchecked Sendable {
+final class StreamingAudioPlayback: @unchecked Sendable {
     private static let bufferCount: Int = 3
     private static let bufferSize: Int = 32 * 1024
 
     private let logger: Logger
     private let lock = NSLock()
-    private let parseQueue = DispatchQueue(label: "talk.stream.parse")
+    fileprivate let audio: AudioToolboxClient
+    private let scheduleParseWork: (@escaping @Sendable () -> Void) -> Void
     fileprivate let bufferLock = NSLock()
     fileprivate let bufferSemaphore = DispatchSemaphore(value: bufferCount)
 
@@ -91,8 +205,19 @@ private final class Playback: @unchecked Sendable {
 
     private var sampleRate: Double = 0
 
-    init(logger: Logger) {
+    init(
+        logger: Logger,
+        audio: AudioToolboxClient = .live,
+        scheduleParseWork: ((@escaping @Sendable () -> Void) -> Void)? = nil)
+    {
         self.logger = logger
+        self.audio = audio
+        if let scheduleParseWork {
+            self.scheduleParseWork = scheduleParseWork
+        } else {
+            let parseQueue = DispatchQueue(label: "talk.stream.parse")
+            self.scheduleParseWork = { work in parseQueue.async(execute: work) }
+        }
     }
 
     func setContinuation(_ continuation: CheckedContinuation<StreamingPlaybackResult, Never>) {
@@ -103,7 +228,7 @@ private final class Playback: @unchecked Sendable {
 
     func start() {
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        let status = AudioFileStreamOpen(
+        let status = self.audio.fileStreamOpen(
             selfPtr,
             propertyListenerProc,
             packetsProc,
@@ -117,11 +242,11 @@ private final class Playback: @unchecked Sendable {
 
     func append(_ data: Data) {
         guard !data.isEmpty else { return }
-        self.parseQueue.async { [weak self] in
+        self.scheduleParseWork { [weak self] in
             guard let self else { return }
             guard let audioFileStream = self.audioFileStream else { return }
             let status = data.withUnsafeBytes { bytes in
-                AudioFileStreamParseBytes(
+                self.audio.fileStreamParseBytes(
                     audioFileStream,
                     UInt32(bytes.count),
                     bytes.baseAddress,
@@ -135,7 +260,7 @@ private final class Playback: @unchecked Sendable {
     }
 
     func finishInput() {
-        self.parseQueue.async { [weak self] in
+        self.scheduleParseWork { [weak self] in
             guard let self else { return }
             self.inputFinished = true
             if self.audioQueue == nil {
@@ -156,7 +281,7 @@ private final class Playback: @unchecked Sendable {
     func stop(immediate: Bool) -> Double? {
         guard let audioQueue else { return nil }
         let interruptedAt = self.currentTimeSeconds()
-        AudioQueueStop(audioQueue, immediate)
+        _ = self.audio.queueStop(audioQueue, immediate)
         return interruptedAt
     }
 
@@ -178,11 +303,11 @@ private final class Playback: @unchecked Sendable {
 
     private func teardown() {
         if let audioQueue {
-            AudioQueueDispose(audioQueue, true)
+            _ = self.audio.queueDispose(audioQueue, true)
             self.audioQueue = nil
         }
         if let audioFileStream {
-            AudioFileStreamClose(audioFileStream)
+            _ = self.audio.fileStreamClose(audioFileStream)
             self.audioFileStream = nil
         }
         self.bufferLock.lock()
@@ -192,7 +317,7 @@ private final class Playback: @unchecked Sendable {
         self.currentPacketDescs.removeAll()
     }
 
-    fileprivate func setupQueueIfNeeded(_ asbd: AudioStreamBasicDescription) {
+    func setupQueueIfNeeded(_ asbd: AudioStreamBasicDescription) {
         guard self.audioQueue == nil else { return }
 
         var format = asbd
@@ -200,7 +325,7 @@ private final class Playback: @unchecked Sendable {
         self.sampleRate = format.mSampleRate
 
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        let status = AudioQueueNewOutput(
+        let status = self.audio.queueNewOutput(
             &format,
             outputCallbackProc,
             selfPtr,
@@ -215,26 +340,29 @@ private final class Playback: @unchecked Sendable {
         }
 
         if let audioQueue {
-            AudioQueueAddPropertyListener(audioQueue, kAudioQueueProperty_IsRunning, isRunningCallbackProc, selfPtr)
+            _ = self.audio.queueAddPropertyListener(audioQueue, kAudioQueueProperty_IsRunning, isRunningCallbackProc, selfPtr)
         }
 
         if let audioFileStream {
             var cookieSize: UInt32 = 0
             var writable: DarwinBoolean = false
-            let cookieStatus = AudioFileStreamGetPropertyInfo(
+            let cookieStatus = self.audio.fileStreamGetPropertyInfo(
                 audioFileStream,
                 kAudioFileStreamProperty_MagicCookieData,
                 &cookieSize,
                 &writable)
             if cookieStatus == noErr, cookieSize > 0, let audioQueue {
                 var cookie = [UInt8](repeating: 0, count: Int(cookieSize))
-                let readStatus = AudioFileStreamGetProperty(
-                    audioFileStream,
-                    kAudioFileStreamProperty_MagicCookieData,
-                    &cookieSize,
-                    &cookie)
+                let readStatus = cookie.withUnsafeMutableBytes { bytes -> OSStatus in
+                    guard let base = bytes.baseAddress else { return -1 }
+                    return self.audio.fileStreamGetProperty(
+                        audioFileStream,
+                        kAudioFileStreamProperty_MagicCookieData,
+                        &cookieSize,
+                        base)
+                }
                 if readStatus == noErr {
-                    AudioQueueSetProperty(audioQueue, kAudioQueueProperty_MagicCookie, cookie, cookieSize)
+                    _ = self.audio.queueSetProperty(audioQueue, kAudioQueueProperty_MagicCookie, cookie, cookieSize)
                 }
             }
         }
@@ -242,7 +370,7 @@ private final class Playback: @unchecked Sendable {
         if let audioQueue {
             for _ in 0..<Self.bufferCount {
                 var buffer: AudioQueueBufferRef?
-                let allocStatus = AudioQueueAllocateBuffer(audioQueue, UInt32(Self.bufferSize), &buffer)
+                let allocStatus = self.audio.queueAllocateBuffer(audioQueue, UInt32(Self.bufferSize), &buffer)
                 if allocStatus == noErr, let buffer {
                     self.bufferLock.lock()
                     self.availableBuffers.append(buffer)
@@ -260,14 +388,14 @@ private final class Playback: @unchecked Sendable {
         let packetCount = UInt32(self.currentPacketDescs.count)
 
         let status = self.currentPacketDescs.withUnsafeBufferPointer { descPtr in
-            AudioQueueEnqueueBuffer(audioQueue, buffer, packetCount, descPtr.baseAddress)
+            self.audio.queueEnqueueBuffer(audioQueue, buffer, packetCount, descPtr.baseAddress)
         }
         if status != noErr {
             self.logger.error("talk queue enqueue failed: \(status)")
         } else {
             if !self.startRequested {
                 self.startRequested = true
-                let startStatus = AudioQueueStart(audioQueue, nil)
+                let startStatus = self.audio.queueStart(audioQueue, nil)
                 if startStatus != noErr {
                     self.logger.error("talk queue start failed: \(startStatus)")
                 }
@@ -278,15 +406,20 @@ private final class Playback: @unchecked Sendable {
         self.currentBufferSize = 0
         self.currentPacketDescs.removeAll(keepingCapacity: true)
         if !flushOnly {
-            self.bufferSemaphore.wait()
             self.bufferLock.lock()
-            let next = self.availableBuffers.popLast()
+            var next = self.availableBuffers.popLast()
             self.bufferLock.unlock()
+            if next == nil {
+                self.bufferSemaphore.wait()
+                self.bufferLock.lock()
+                next = self.availableBuffers.popLast()
+                self.bufferLock.unlock()
+            }
             if let next { self.currentBuffer = next }
         }
     }
 
-    fileprivate func handlePackets(
+    func handlePackets(
         numberBytes: UInt32,
         numberPackets: UInt32,
         inputData: UnsafeRawPointer,
@@ -301,10 +434,15 @@ private final class Playback: @unchecked Sendable {
         }
 
         if self.currentBuffer == nil {
-            self.bufferSemaphore.wait()
             self.bufferLock.lock()
             self.currentBuffer = self.availableBuffers.popLast()
             self.bufferLock.unlock()
+            if self.currentBuffer == nil {
+                self.bufferSemaphore.wait()
+                self.bufferLock.lock()
+                self.currentBuffer = self.availableBuffers.popLast()
+                self.bufferLock.unlock()
+            }
             self.currentBufferSize = 0
             self.currentPacketDescs.removeAll(keepingCapacity: true)
         }
@@ -348,25 +486,25 @@ private final class Playback: @unchecked Sendable {
     private func currentTimeSeconds() -> Double? {
         guard let audioQueue, sampleRate > 0 else { return nil }
         var timeStamp = AudioTimeStamp()
-        let status = AudioQueueGetCurrentTime(audioQueue, nil, &timeStamp, nil)
+        let status = self.audio.queueGetCurrentTime(audioQueue, nil, &timeStamp, nil)
         if status != noErr { return nil }
         if timeStamp.mSampleTime.isNaN { return nil }
         return timeStamp.mSampleTime / sampleRate
     }
 }
 
-private func propertyListenerProc(
+func propertyListenerProc(
     inClientData: UnsafeMutableRawPointer,
     inAudioFileStream: AudioFileStreamID,
     inPropertyID: AudioFileStreamPropertyID,
     ioFlags: UnsafeMutablePointer<AudioFileStreamPropertyFlags>)
 {
-    let playback = Unmanaged<Playback>.fromOpaque(inClientData).takeUnretainedValue()
+    let playback = Unmanaged<StreamingAudioPlayback>.fromOpaque(inClientData).takeUnretainedValue()
 
     if inPropertyID == kAudioFileStreamProperty_DataFormat {
         var format = AudioStreamBasicDescription()
         var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
-        let status = AudioFileStreamGetProperty(inAudioFileStream, inPropertyID, &size, &format)
+        let status = playback.audio.fileStreamGetProperty(inAudioFileStream, inPropertyID, &size, &format)
         if status == noErr {
             playback.audioFormat = format
             playback.setupQueueIfNeeded(format)
@@ -374,21 +512,21 @@ private func propertyListenerProc(
     } else if inPropertyID == kAudioFileStreamProperty_PacketSizeUpperBound {
         var maxPacketSize: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
-        let status = AudioFileStreamGetProperty(inAudioFileStream, inPropertyID, &size, &maxPacketSize)
+        let status = playback.audio.fileStreamGetProperty(inAudioFileStream, inPropertyID, &size, &maxPacketSize)
         if status == noErr {
             playback.maxPacketSize = maxPacketSize
         }
     }
 }
 
-private func packetsProc(
+func packetsProc(
     inClientData: UnsafeMutableRawPointer,
     inNumberBytes: UInt32,
     inNumberPackets: UInt32,
     inInputData: UnsafeRawPointer,
     inPacketDescriptions: UnsafeMutablePointer<AudioStreamPacketDescription>?)
 {
-    let playback = Unmanaged<Playback>.fromOpaque(inClientData).takeUnretainedValue()
+    let playback = Unmanaged<StreamingAudioPlayback>.fromOpaque(inClientData).takeUnretainedValue()
     playback.handlePackets(
         numberBytes: inNumberBytes,
         numberPackets: inNumberPackets,
@@ -396,20 +534,20 @@ private func packetsProc(
         packetDescriptions: inPacketDescriptions)
 }
 
-private func outputCallbackProc(
+func outputCallbackProc(
     inUserData: UnsafeMutableRawPointer?,
     inAQ: AudioQueueRef,
     inBuffer: AudioQueueBufferRef)
 {
     guard let inUserData else { return }
-    let playback = Unmanaged<Playback>.fromOpaque(inUserData).takeUnretainedValue()
+    let playback = Unmanaged<StreamingAudioPlayback>.fromOpaque(inUserData).takeUnretainedValue()
     playback.bufferLock.lock()
     playback.availableBuffers.append(inBuffer)
     playback.bufferLock.unlock()
     playback.bufferSemaphore.signal()
 }
 
-private func isRunningCallbackProc(
+func isRunningCallbackProc(
     inUserData: UnsafeMutableRawPointer?,
     inAQ: AudioQueueRef,
     inID: AudioQueuePropertyID)
@@ -417,10 +555,10 @@ private func isRunningCallbackProc(
     guard let inUserData else { return }
     guard inID == kAudioQueueProperty_IsRunning else { return }
 
-    let playback = Unmanaged<Playback>.fromOpaque(inUserData).takeUnretainedValue()
+    let playback = Unmanaged<StreamingAudioPlayback>.fromOpaque(inUserData).takeUnretainedValue()
     var running: UInt32 = 0
     var size = UInt32(MemoryLayout<UInt32>.size)
-    let status = AudioQueueGetProperty(inAQ, kAudioQueueProperty_IsRunning, &running, &size)
+    let status = playback.audio.queueGetProperty(inAQ, kAudioQueueProperty_IsRunning, &running, &size)
     if status != noErr { return }
 
     if running == 0, playback.inputFinished {
