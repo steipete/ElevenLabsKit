@@ -62,6 +62,9 @@ private struct ContentView: View {
     @Binding var audioPlayer: AVAudioPlayer?
 
     @State private var didBootstrap = false
+    @State private var streamTTFBSeconds: Double?
+    @State private var streamTotalSeconds: Double?
+    @State private var fetchRequestSeconds: Double?
 
     var body: some View {
         HSplitView {
@@ -117,6 +120,23 @@ private struct ContentView: View {
 
                 Text(status)
                     .foregroundStyle(.secondary)
+
+                GroupBox("Timings") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        LabeledContent("Stream TTFB") {
+                            Text(formatSeconds(streamTTFBSeconds))
+                                .font(.system(.body, design: .monospaced))
+                        }
+                        LabeledContent("Stream Total") {
+                            Text(formatSeconds(streamTotalSeconds))
+                                .font(.system(.body, design: .monospaced))
+                        }
+                        LabeledContent("Fetch Request") {
+                            Text(formatSeconds(fetchRequestSeconds))
+                                .font(.system(.body, design: .monospaced))
+                        }
+                    }
+                }
             }
             .padding()
             .task {
@@ -208,6 +228,11 @@ private struct ContentView: View {
         isWorking = true
         status = "Streaming…"
         defer { isWorking = false }
+        streamTTFBSeconds = nil
+        streamTotalSeconds = nil
+
+        let clock = ContinuousClock()
+        let start = clock.now
 
         let normalizedOutput = ElevenLabsTTSClient.validatedOutputFormat(outputFormat) ?? outputFormat.trimmingCharacters(in: .whitespacesAndNewlines)
         let request = ElevenLabsTTSRequest(
@@ -225,6 +250,7 @@ private struct ContentView: View {
                 status = "No audio returned"
                 return
             }
+            streamTTFBSeconds = seconds(from: clock, since: start)
 
             let detected = AudioKind.detect(from: firstChunk, requestedOutput: normalizedOutput)
             let replayStream = makeReplayStream(
@@ -245,6 +271,7 @@ private struct ContentView: View {
                 let result = await StreamingAudioPlayer.shared.play(stream: replayStream)
                 status = result.finished ? "Finished (MP3)" : "Stopped (MP3) at \(result.interruptedAt ?? 0)s"
             }
+            streamTotalSeconds = seconds(from: clock, since: start)
         } catch {
             handleRequestError(error)
         }
@@ -254,6 +281,10 @@ private struct ContentView: View {
         isWorking = true
         status = "Fetching…"
         defer { isWorking = false }
+        fetchRequestSeconds = nil
+
+        let clock = ContinuousClock()
+        let start = clock.now
 
         let normalizedOutput = ElevenLabsTTSClient.validatedOutputFormat(outputFormat) ?? outputFormat.trimmingCharacters(in: .whitespacesAndNewlines)
         let request = ElevenLabsTTSRequest(
@@ -265,6 +296,7 @@ private struct ContentView: View {
         do {
             let client = ElevenLabsTTSClient(apiKey: apiKey)
             let data = try await client.synthesize(voiceId: voiceId, request: request)
+            fetchRequestSeconds = seconds(from: clock, since: start)
 
             let detected = AudioKind.detect(from: data, requestedOutput: normalizedOutput)
 
@@ -304,6 +336,17 @@ private struct ContentView: View {
         audioPlayer = nil
         isWorking = false
         status = "Stopped"
+    }
+
+    private func seconds(from clock: ContinuousClock, since start: ContinuousClock.Instant) -> Double {
+        let duration = clock.now - start
+        let components = duration.components
+        return Double(components.seconds) + Double(components.attoseconds) / 1_000_000_000_000_000_000
+    }
+
+    private func formatSeconds(_ value: Double?) -> String {
+        guard let value else { return "—" }
+        return String(format: "%.2fs", value)
     }
 
     private func handleRequestError(_ error: Error) {
