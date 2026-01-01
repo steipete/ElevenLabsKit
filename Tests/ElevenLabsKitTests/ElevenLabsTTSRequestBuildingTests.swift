@@ -1,6 +1,6 @@
+@testable import ElevenLabsKit
 import Foundation
 import Testing
-@testable import ElevenLabsKit
 
 @Suite final class ElevenLabsTTSRequestBuildingTests {
     @Test func buildSynthesizeRequestSetsAcceptHeaderFromOutputFormat() {
@@ -12,7 +12,8 @@ import Testing
             apiKey: "k",
             body: body,
             timeoutSeconds: 1,
-            outputFormat: "pcm_44100")
+            outputFormat: "pcm_44100"
+        )
         #expect(pcm.value(forHTTPHeaderField: "Accept") == "audio/pcm")
 
         let mp3 = ElevenLabsTTSClient.buildSynthesizeRequest(
@@ -20,7 +21,8 @@ import Testing
             apiKey: "k",
             body: body,
             timeoutSeconds: 1,
-            outputFormat: "mp3_44100_128")
+            outputFormat: "mp3_44100_128"
+        )
         #expect(mp3.value(forHTTPHeaderField: "Accept") == "audio/mpeg")
 
         let fallback = ElevenLabsTTSClient.buildSynthesizeRequest(
@@ -28,7 +30,8 @@ import Testing
             apiKey: "k",
             body: body,
             timeoutSeconds: 1,
-            outputFormat: nil)
+            outputFormat: nil
+        )
         #expect(fallback.value(forHTTPHeaderField: "Accept") == "audio/mpeg")
     }
 }

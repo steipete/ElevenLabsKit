@@ -23,9 +23,9 @@ public final class PCMStreamingAudioPlayer {
         self.engineFactory = { AVAudioEngine() }
         self.startEngine = { engine in try engine.start() }
         self.stopEngine = { engine in engine.stop() }
-        self.engine = self.engineFactory()
-        self.player = self.playerFactory()
-        self.player.attach(to: self.engine)
+        self.engine = engineFactory()
+        self.player = playerFactory()
+        player.attach(to: engine)
     }
 
     init(
@@ -40,22 +40,23 @@ public final class PCMStreamingAudioPlayer {
         self.stopEngine = stopEngine
         self.engine = engineFactory()
         self.player = playerFactory()
-        self.player.attach(to: self.engine)
+        player.attach(to: engine)
     }
 
     public func play(stream: AsyncThrowingStream<Data, Error>, sampleRate: Double) async -> StreamingPlaybackResult {
-        self.stopInternal()
+        stopInternal()
 
         let format = AVAudioFormat(
             commonFormat: .pcmFormatInt16,
             sampleRate: sampleRate,
             channels: 1,
-            interleaved: true)
+            interleaved: true
+        )
 
         guard let format else {
             return StreamingPlaybackResult(finished: false, interruptedAt: nil)
         }
-        self.configure(format: format)
+        configure(format: format)
 
         return await withCheckedContinuation { continuation in
             self.continuation = continuation
@@ -66,32 +67,32 @@ public final class PCMStreamingAudioPlayer {
                 guard let self else { return }
                 do {
                     for try await chunk in stream {
-                        await self.enqueuePCM(chunk, format: format)
+                        await enqueuePCM(chunk, format: format)
                     }
-                    self.finishInput()
+                    finishInput()
                 } catch {
-                    self.fail(error)
+                    fail(error)
                 }
             }
         }
     }
 
     public func stop() -> Double? {
-        let interruptedAt = self.currentTimeSeconds()
-        self.stopInternal()
-        self.finish(StreamingPlaybackResult(finished: false, interruptedAt: interruptedAt))
+        let interruptedAt = currentTimeSeconds()
+        stopInternal()
+        finish(StreamingPlaybackResult(finished: false, interruptedAt: interruptedAt))
         return interruptedAt
     }
 
     private func configure(format: AVAudioFormat) {
         if self.format?.sampleRate != format.sampleRate || self.format?.commonFormat != format.commonFormat {
-            self.stopEngine(self.engine)
-            self.engine = self.engineFactory()
-            self.player = self.playerFactory()
-            self.player.attach(to: self.engine)
+            stopEngine(engine)
+            engine = engineFactory()
+            player = playerFactory()
+            player.attach(to: engine)
         }
         self.format = format
-        self.player.connect(to: self.engine, format: format)
+        player.connect(to: engine, format: format)
     }
 
     private func enqueuePCM(_ data: Data, format: AVAudioFormat) async {
@@ -111,53 +112,53 @@ public final class PCMStreamingAudioPlayer {
             }
         }
 
-        self.pendingBuffers += 1
+        pendingBuffers += 1
         Task { @MainActor [weak self] in
             guard let self else { return }
-            await self.player.scheduleBuffer(buffer)
-            self.pendingBuffers = max(0, self.pendingBuffers - 1)
-            if self.inputFinished && self.pendingBuffers == 0 {
-                self.finish(StreamingPlaybackResult(finished: true, interruptedAt: nil))
+            await player.scheduleBuffer(buffer)
+            pendingBuffers = max(0, pendingBuffers - 1)
+            if inputFinished, pendingBuffers == 0 {
+                finish(StreamingPlaybackResult(finished: true, interruptedAt: nil))
             }
         }
 
-        if !self.player.isPlaying {
+        if !player.isPlaying {
             do {
-                try self.startEngine(self.engine)
-                self.player.play()
+                try startEngine(engine)
+                player.play()
             } catch {
-                self.logger.error("pcm engine start failed: \(error.localizedDescription, privacy: .public)")
-                self.fail(error)
+                logger.error("pcm engine start failed: \(error.localizedDescription, privacy: .public)")
+                fail(error)
             }
         }
     }
 
     private func finishInput() {
-        self.inputFinished = true
-        if self.pendingBuffers == 0 {
-            self.finish(StreamingPlaybackResult(finished: true, interruptedAt: nil))
+        inputFinished = true
+        if pendingBuffers == 0 {
+            finish(StreamingPlaybackResult(finished: true, interruptedAt: nil))
         }
     }
 
     private func fail(_ error: Error) {
-        self.logger.error("pcm stream failed: \(error.localizedDescription, privacy: .public)")
-        self.finish(StreamingPlaybackResult(finished: false, interruptedAt: nil))
+        logger.error("pcm stream failed: \(error.localizedDescription, privacy: .public)")
+        finish(StreamingPlaybackResult(finished: false, interruptedAt: nil))
     }
 
     private func stopInternal() {
-        self.player.stop()
-        self.stopEngine(self.engine)
-        self.pendingBuffers = 0
-        self.inputFinished = false
+        player.stop()
+        stopEngine(engine)
+        pendingBuffers = 0
+        inputFinished = false
     }
 
     private func finish(_ result: StreamingPlaybackResult) {
-        let continuation = self.continuation
+        let continuation = continuation
         self.continuation = nil
         continuation?.resume(returning: result)
     }
 
     private func currentTimeSeconds() -> Double? {
-        self.player.currentTimeSeconds()
+        player.currentTimeSeconds()
     }
 }

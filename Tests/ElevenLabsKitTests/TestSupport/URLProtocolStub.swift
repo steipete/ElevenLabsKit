@@ -31,7 +31,7 @@ private final class URLProtocolStubStorage: @unchecked Sendable {
     }
 }
 
-final class URLProtocolStub: URLProtocol {
+class URLProtocolStub: URLProtocol {
     struct Stub {
         var response: HTTPURLResponse?
         var dataChunks: [Data]
@@ -54,7 +54,7 @@ final class URLProtocolStub: URLProtocol {
         return URLSession(configuration: config)
     }
 
-    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canInit(with _: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {

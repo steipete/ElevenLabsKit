@@ -31,7 +31,7 @@ public enum TalkTTSValidation: Sendable {
 
     public static func validatedSeed(_ value: Int?) -> UInt32? {
         guard let value else { return nil }
-        if value < 0 || value > 4294967295 { return nil }
+        if value < 0 || value > 4_294_967_295 { return nil }
         return UInt32(value)
     }
 

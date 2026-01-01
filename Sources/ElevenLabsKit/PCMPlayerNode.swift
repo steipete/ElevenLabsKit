@@ -19,31 +19,31 @@ final class AVAudioPlayerNodeAdapter: PCMPlayerNodeing {
         self.node = node
     }
 
-    var isPlaying: Bool { self.node.isPlaying }
+    var isPlaying: Bool { node.isPlaying }
 
     func attach(to engine: AVAudioEngine) {
-        engine.attach(self.node)
+        engine.attach(node)
     }
 
     func connect(to engine: AVAudioEngine, format: AVAudioFormat) {
-        engine.connect(self.node, to: engine.mainMixerNode, format: format)
+        engine.connect(node, to: engine.mainMixerNode, format: format)
     }
 
     func scheduleBuffer(_ buffer: AVAudioPCMBuffer) async {
-        await self.node.scheduleBuffer(buffer)
+        await node.scheduleBuffer(buffer)
     }
 
     func play() {
-        self.node.play()
+        node.play()
     }
 
     func stop() {
-        self.node.stop()
+        node.stop()
     }
 
     func currentTimeSeconds() -> Double? {
-        guard let nodeTime = self.node.lastRenderTime,
-              let playerTime = self.node.playerTime(forNodeTime: nodeTime)
+        guard let nodeTime = node.lastRenderTime,
+              let playerTime = node.playerTime(forNodeTime: nodeTime)
         else { return nil }
         return Double(playerTime.sampleTime) / playerTime.sampleRate
     }

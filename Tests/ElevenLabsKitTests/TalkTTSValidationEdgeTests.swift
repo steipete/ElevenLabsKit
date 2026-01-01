@@ -1,5 +1,5 @@
-import Testing
 @testable import ElevenLabsKit
+import Testing
 
 @Suite final class TalkTTSValidationEdgeTests {
     @Test func resolveSpeedBoundsAreExclusive() {

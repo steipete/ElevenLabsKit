@@ -1,6 +1,6 @@
+@testable import ElevenLabsKit
 import Foundation
 import Testing
-@testable import ElevenLabsKit
 
 @Suite(.serialized) final class ElevenLabsTTSClientNetworkingTests {
     private actor SleepRecorder {
@@ -14,10 +14,11 @@ import Testing
         URLProtocolStub.setStubs([
             .init(
                 response: HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [
-                    "Content-Type": "audio/mpeg",
+                    "Content-Type": "audio/mpeg"
                 ]),
                 dataChunks: [Data([0x01, 0x02, 0x03])],
-                error: nil),
+                error: nil
+            )
         ])
         defer { URLProtocolStub.setStubs([]) }
 
@@ -34,16 +35,18 @@ import Testing
         URLProtocolStub.setStubs([
             .init(
                 response: HTTPURLResponse(url: url, statusCode: 500, httpVersion: nil, headerFields: [
-                    "Content-Type": "application/json",
+                    "Content-Type": "application/json"
                 ]),
                 dataChunks: [Data("nope".utf8)],
-                error: nil),
+                error: nil
+            ),
             .init(
                 response: HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [
-                    "Content-Type": "audio/mpeg",
+                    "Content-Type": "audio/mpeg"
                 ]),
                 dataChunks: [Data("ok".utf8)],
-                error: nil),
+                error: nil
+            )
         ])
         defer { URLProtocolStub.setStubs([]) }
 
@@ -58,7 +61,7 @@ import Testing
 
         let data = try await client.synthesize(voiceId: "voice", request: ElevenLabsTTSRequest(text: "hi", outputFormat: "mp3_44100_128"))
         #expect(String(data: data, encoding: .utf8) == "ok")
-        #expect((await sleepRecorder.snapshot()).count == 1)
+        #expect(await (sleepRecorder.snapshot()).count == 1)
     }
 
     @Test func synthesizeAcceptsOctetStreamForPCM() async throws {
@@ -66,10 +69,11 @@ import Testing
         URLProtocolStub.setStubs([
             .init(
                 response: HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [
-                    "Content-Type": "application/octet-stream",
+                    "Content-Type": "application/octet-stream"
                 ]),
                 dataChunks: [Data(repeating: 0, count: 4)],
-                error: nil),
+                error: nil
+            )
         ])
         defer { URLProtocolStub.setStubs([]) }
 
@@ -84,10 +88,11 @@ import Testing
         URLProtocolStub.setStubs([
             .init(
                 response: HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [
-                    "Content-Type": "text/plain",
+                    "Content-Type": "text/plain"
                 ]),
                 dataChunks: [Data("no audio".utf8)],
-                error: nil),
+                error: nil
+            )
         ])
         defer { URLProtocolStub.setStubs([]) }
 
@@ -105,7 +110,8 @@ import Testing
             .init(
                 response: HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil),
                 dataChunks: [Data(#"{"voices":[{"voice_id":"v1","name":"A"},{"voice_id":"v2"}]}"#.utf8)],
-                error: nil),
+                error: nil
+            )
         ])
         defer { URLProtocolStub.setStubs([]) }
 
@@ -123,10 +129,11 @@ import Testing
         URLProtocolStub.setStubs([
             .init(
                 response: HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [
-                    "Content-Type": "audio/mpeg",
+                    "Content-Type": "audio/mpeg"
                 ]),
-                dataChunks: [Data(repeating: 0x7F, count: 10_000)],
-                error: nil),
+                dataChunks: [Data(repeating: 0x7F, count: 10000)],
+                error: nil
+            )
         ])
         defer {
             URLProtocolStub.setRequestObserver(nil)
@@ -148,6 +155,6 @@ import Testing
         #expect(requestedURL?.absoluteString.contains("output_format=mp3_44100_128") == true)
         #expect(requestedURL?.absoluteString.contains("optimize_streaming_latency=4") == true)
         #expect(chunks.first?.count == 8192)
-        #expect(chunks.reduce(0, { $0 + $1.count }) == 10_000)
+        #expect(chunks.reduce(0) { $0 + $1.count } == 10000)
     }
 }

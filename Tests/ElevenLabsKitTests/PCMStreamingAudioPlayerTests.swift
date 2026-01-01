@@ -1,6 +1,6 @@
 import AVFoundation
-import Testing
 @testable import ElevenLabsKit
+import Testing
 
 @MainActor
 private final class FakePCMPlayerNode: PCMPlayerNodeing {
@@ -9,24 +9,24 @@ private final class FakePCMPlayerNode: PCMPlayerNodeing {
     var scheduledBuffers: [AVAudioPCMBuffer] = []
     var onSchedule: (() -> Void)?
 
-    func attach(to engine: AVAudioEngine) {}
-    func connect(to engine: AVAudioEngine, format: AVAudioFormat) {}
+    func attach(to _: AVAudioEngine) {}
+    func connect(to _: AVAudioEngine, format _: AVAudioFormat) {}
 
     func scheduleBuffer(_ buffer: AVAudioPCMBuffer) async {
-        self.scheduledBuffers.append(buffer)
-        self.onSchedule?()
+        scheduledBuffers.append(buffer)
+        onSchedule?()
     }
 
     func play() {
-        self.isPlaying = true
+        isPlaying = true
     }
 
     func stop() {
-        self.isPlaying = false
+        isPlaying = false
     }
 
     func currentTimeSeconds() -> Double? {
-        self.currentTimeSecondsValue
+        currentTimeSecondsValue
     }
 }
 
@@ -43,12 +43,12 @@ private final class FakePCMPlayerNode: PCMPlayerNodeing {
         var continuation: AsyncThrowingStream<Data, Error>.Continuation?
         let stream = AsyncThrowingStream<Data, Error> { cont in
             continuation = cont
-            let samples = Data(repeating: 0, count: 44_100)
+            let samples = Data(repeating: 0, count: 44100)
             cont.yield(samples)
         }
 
         let task = Task { @MainActor in
-            await player.play(stream: stream, sampleRate: 44_100)
+            await player.play(stream: stream, sampleRate: 44100)
         }
 
         for _ in 0..<5 where fakePlayer.scheduledBuffers.isEmpty {

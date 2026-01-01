@@ -36,8 +36,8 @@ public struct ElevenLabsTTSRequest: Sendable {
         seed: UInt32? = nil,
         normalize: String? = nil,
         language: String? = nil,
-        latencyTier: Int? = nil)
-    {
+        latencyTier: Int? = nil
+    ) {
         self.text = text
         self.modelId = modelId
         self.outputFormat = outputFormat
@@ -68,8 +68,8 @@ public struct ElevenLabsTTSClient: Sendable {
         listVoicesTimeoutSeconds: TimeInterval = 15,
         baseUrl: URL = URL(string: "https://api.elevenlabs.io")!,
         urlSession: URLSession = .shared,
-        sleep: (@Sendable (TimeInterval) async -> Void)? = nil)
-    {
+        sleep: (@Sendable (TimeInterval) async -> Void)? = nil
+    ) {
         self.apiKey = apiKey
         self.requestTimeoutSeconds = requestTimeoutSeconds
         self.listVoicesTimeoutSeconds = listVoicesTimeoutSeconds
@@ -83,16 +83,16 @@ public struct ElevenLabsTTSClient: Sendable {
     public func synthesizeWithHardTimeout(
         voiceId: String,
         request: ElevenLabsTTSRequest,
-        hardTimeoutSeconds: TimeInterval) async throws -> Data
-    {
+        hardTimeoutSeconds: TimeInterval
+    ) async throws -> Data {
         try await withThrowingTaskGroup(of: Data.self) { group in
             group.addTask {
-                try await self.synthesize(voiceId: voiceId, request: request)
+                try await synthesize(voiceId: voiceId, request: request)
             }
             group.addTask {
-                await self.sleep(hardTimeoutSeconds)
+                await sleep(hardTimeoutSeconds)
                 throw NSError(domain: "ElevenLabsTTS", code: 408, userInfo: [
-                    NSLocalizedDescriptionKey: "ElevenLabs TTS timed out after \(hardTimeoutSeconds)s",
+                    NSLocalizedDescriptionKey: "ElevenLabs TTS timed out after \(hardTimeoutSeconds)s"
                 ])
             }
             let data = try await group.next()!
@@ -102,7 +102,7 @@ public struct ElevenLabsTTSClient: Sendable {
     }
 
     public func synthesize(voiceId: String, request: ElevenLabsTTSRequest) async throws -> Data {
-        var url = self.baseUrl
+        var url = baseUrl
         url.appendPathComponent("v1")
         url.appendPathComponent("text-to-speech")
         url.appendPathComponent(voiceId)
@@ -113,25 +113,26 @@ public struct ElevenLabsTTSClient: Sendable {
         for attempt in 0..<3 {
             let req = Self.buildSynthesizeRequest(
                 url: url,
-                apiKey: self.apiKey,
+                apiKey: apiKey,
                 body: body,
-                timeoutSeconds: self.requestTimeoutSeconds,
-                outputFormat: request.outputFormat)
+                timeoutSeconds: requestTimeoutSeconds,
+                outputFormat: request.outputFormat
+            )
 
             do {
-                let (data, response) = try await self.urlSession.data(for: req)
+                let (data, response) = try await urlSession.data(for: req)
                 if let http = response as? HTTPURLResponse {
                     let contentType = (http.value(forHTTPHeaderField: "Content-Type") ?? "unknown").lowercased()
                     if http.statusCode == 429 || http.statusCode >= 500 {
                         let message = Self.truncatedErrorBody(data)
                         lastError = NSError(domain: "ElevenLabsTTS", code: http.statusCode, userInfo: [
-                            NSLocalizedDescriptionKey: "ElevenLabs retryable failure: \(http.statusCode) ct=\(contentType) \(message)",
+                            NSLocalizedDescriptionKey: "ElevenLabs retryable failure: \(http.statusCode) ct=\(contentType) \(message)"
                         ])
                         if attempt < 2 {
                             let retryAfter = Double(http.value(forHTTPHeaderField: "Retry-After") ?? "")
                             let baseDelay = [0.25, 0.75, 1.5][attempt]
                             let delaySeconds = max(baseDelay, retryAfter ?? 0)
-                            await self.sleep(delaySeconds)
+                            await sleep(delaySeconds)
                             continue
                         }
                         throw lastError!
@@ -140,14 +141,14 @@ public struct ElevenLabsTTSClient: Sendable {
                     if http.statusCode >= 400 {
                         let message = Self.truncatedErrorBody(data)
                         throw NSError(domain: "ElevenLabsTTS", code: http.statusCode, userInfo: [
-                            NSLocalizedDescriptionKey: "ElevenLabs failed: \(http.statusCode) ct=\(contentType) \(message)",
+                            NSLocalizedDescriptionKey: "ElevenLabs failed: \(http.statusCode) ct=\(contentType) \(message)"
                         ])
                     }
 
                     if !Self.isAudioContentType(contentType, outputFormat: request.outputFormat) {
                         let message = Self.truncatedErrorBody(data)
                         throw NSError(domain: "ElevenLabsTTS", code: 415, userInfo: [
-                            NSLocalizedDescriptionKey: "ElevenLabs returned non-audio ct=\(contentType) \(message)",
+                            NSLocalizedDescriptionKey: "ElevenLabs returned non-audio ct=\(contentType) \(message)"
                         ])
                     }
                 }
@@ -155,45 +156,46 @@ public struct ElevenLabsTTSClient: Sendable {
             } catch {
                 lastError = error
                 if attempt < 2 {
-                    await self.sleep([0.25, 0.75, 1.5][attempt])
+                    await sleep([0.25, 0.75, 1.5][attempt])
                     continue
                 }
                 throw error
             }
         }
         throw lastError ?? NSError(domain: "ElevenLabsTTS", code: 1, userInfo: [
-            NSLocalizedDescriptionKey: "ElevenLabs failed",
+            NSLocalizedDescriptionKey: "ElevenLabs failed"
         ])
     }
 
     public func streamSynthesize(
         voiceId: String,
-        request: ElevenLabsTTSRequest) -> AsyncThrowingStream<Data, Error>
-    {
+        request: ElevenLabsTTSRequest
+    ) -> AsyncThrowingStream<Data, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     let url = Self.streamingURL(
-                        baseUrl: self.baseUrl,
+                        baseUrl: baseUrl,
                         voiceId: voiceId,
                         outputFormat: request.outputFormat,
-                        latencyTier: request.latencyTier)
+                        latencyTier: request.latencyTier
+                    )
                     let body = try JSONSerialization.data(withJSONObject: Self.buildPayload(request), options: [])
 
                     var req = URLRequest(url: url)
                     req.httpMethod = "POST"
                     req.httpBody = body
-                    req.timeoutInterval = self.requestTimeoutSeconds
+                    req.timeoutInterval = requestTimeoutSeconds
                     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     if let accept = Self.acceptHeader(for: request.outputFormat) {
                         req.setValue(accept, forHTTPHeaderField: "Accept")
                     }
-                    req.setValue(self.apiKey, forHTTPHeaderField: "xi-api-key")
+                    req.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
 
-                    let (bytes, response) = try await self.urlSession.bytes(for: req)
+                    let (bytes, response) = try await urlSession.bytes(for: req)
                     guard let http = response as? HTTPURLResponse else {
                         throw NSError(domain: "ElevenLabsTTS", code: 1, userInfo: [
-                            NSLocalizedDescriptionKey: "ElevenLabs invalid response",
+                            NSLocalizedDescriptionKey: "ElevenLabs invalid response"
                         ])
                     }
 
@@ -201,21 +203,21 @@ public struct ElevenLabsTTSClient: Sendable {
                     if http.statusCode >= 400 {
                         let message = try await Self.readErrorBody(bytes: bytes)
                         throw NSError(domain: "ElevenLabsTTS", code: http.statusCode, userInfo: [
-                            NSLocalizedDescriptionKey: "ElevenLabs failed: \(http.statusCode) ct=\(contentType) \(message)",
+                            NSLocalizedDescriptionKey: "ElevenLabs failed: \(http.statusCode) ct=\(contentType) \(message)"
                         ])
                     }
                     if !Self.isAudioContentType(contentType, outputFormat: request.outputFormat) {
                         let message = try await Self.readErrorBody(bytes: bytes)
                         throw NSError(domain: "ElevenLabsTTS", code: 415, userInfo: [
-                            NSLocalizedDescriptionKey: "ElevenLabs returned non-audio ct=\(contentType) \(message)",
+                            NSLocalizedDescriptionKey: "ElevenLabs returned non-audio ct=\(contentType) \(message)"
                         ])
                     }
 
                     var buffer = Data()
-                    buffer.reserveCapacity(16_384)
+                    buffer.reserveCapacity(16384)
                     for try await byte in bytes {
                         buffer.append(byte)
-                        if buffer.count >= 8_192 {
+                        if buffer.count >= 8192 {
                             continuation.yield(buffer)
                             buffer.removeAll(keepingCapacity: true)
                         }
@@ -236,20 +238,20 @@ public struct ElevenLabsTTSClient: Sendable {
     }
 
     public func listVoices() async throws -> [ElevenLabsVoice] {
-        var url = self.baseUrl
+        var url = baseUrl
         url.appendPathComponent("v1")
         url.appendPathComponent("voices")
 
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
-        req.timeoutInterval = self.listVoicesTimeoutSeconds
-        req.setValue(self.apiKey, forHTTPHeaderField: "xi-api-key")
+        req.timeoutInterval = listVoicesTimeoutSeconds
+        req.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
 
-        let (data, response) = try await self.urlSession.data(for: req)
+        let (data, response) = try await urlSession.data(for: req)
         if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
             let message = Self.truncatedErrorBody(data)
             throw NSError(domain: "ElevenLabsTTS", code: http.statusCode, userInfo: [
-                NSLocalizedDescriptionKey: "ElevenLabs voices failed: \(http.statusCode) \(message)",
+                NSLocalizedDescriptionKey: "ElevenLabs voices failed: \(http.statusCode) \(message)"
             ])
         }
 
@@ -315,8 +317,8 @@ public struct ElevenLabsTTSClient: Sendable {
         baseUrl: URL,
         voiceId: String,
         outputFormat: String?,
-        latencyTier: Int?) -> URL
-    {
+        latencyTier: Int?
+    ) -> URL {
         var url = baseUrl
         url.appendPathComponent("v1")
         url.appendPathComponent("text-to-speech")
@@ -351,8 +353,8 @@ public struct ElevenLabsTTSClient: Sendable {
         apiKey: String,
         body: Data,
         timeoutSeconds: TimeInterval,
-        outputFormat: String?) -> URLRequest
-    {
+        outputFormat: String?
+    ) -> URLRequest {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.httpBody = body

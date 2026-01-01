@@ -1,8 +1,8 @@
 import AudioToolbox
+@testable import ElevenLabsKit
 import Foundation
 import OSLog
 import Testing
-@testable import ElevenLabsKit
 
 @Suite(.serialized) final class StreamingAudioPlaybackTests {
     private final class Flag: @unchecked Sendable {
@@ -113,7 +113,7 @@ import Testing
         playback.start()
 
         var format = AudioStreamBasicDescription()
-        format.mSampleRate = 44_100
+        format.mSampleRate = 44100
         playback.setupQueueIfNeeded(format)
 
         playback.append(Data([0x00, 0x01, 0x02]))
@@ -168,7 +168,7 @@ import Testing
         playback.start()
 
         var format = AudioStreamBasicDescription()
-        format.mSampleRate = 44_100
+        format.mSampleRate = 44100
         playback.setupQueueIfNeeded(format)
 
         let bytes = [UInt8](repeating: 0x11, count: 10)
@@ -177,7 +177,8 @@ import Testing
                 numberBytes: UInt32(raw.count),
                 numberPackets: 2,
                 inputData: raw.baseAddress!,
-                packetDescriptions: nil)
+                packetDescriptions: nil
+            )
         }
 
         playback.finishInput()
@@ -223,7 +224,7 @@ import Testing
         )
 
         var format = AudioStreamBasicDescription()
-        format.mSampleRate = 44_100
+        format.mSampleRate = 44100
         playback.setupQueueIfNeeded(format)
 
         let interruptedAt = playback.stop(immediate: true)
