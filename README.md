@@ -1,4 +1,4 @@
-# ElevenLabsKit
+# 📣 ElevenLabsKit — ElevenLabs voices on tap—SwiftPM-friendly, streaming-native.
 
 Swift helpers for ElevenLabs TTS on Apple platforms (iOS/macOS).
 
