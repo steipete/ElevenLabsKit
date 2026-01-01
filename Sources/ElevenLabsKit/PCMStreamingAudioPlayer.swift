@@ -2,8 +2,10 @@
 import Foundation
 import OSLog
 
+/// Plays 16-bit PCM streaming audio using AVAudioEngine.
 @MainActor
 public final class PCMStreamingAudioPlayer {
+    /// Shared PCM player instance.
     public static let shared = PCMStreamingAudioPlayer()
 
     private let logger = Logger(subsystem: "com.steipete.clawdis", category: "talk.tts.pcm")
@@ -18,6 +20,7 @@ public final class PCMStreamingAudioPlayer {
     private var inputFinished = false
     private var continuation: CheckedContinuation<StreamingPlaybackResult, Never>?
 
+    /// Creates a default PCM player.
     public init() {
         self.playerFactory = { AVAudioPlayerNodeAdapter() }
         self.engineFactory = { AVAudioEngine() }
@@ -43,6 +46,7 @@ public final class PCMStreamingAudioPlayer {
         player.attach(to: engine)
     }
 
+    /// Starts playing PCM data at the provided sample rate.
     public func play(stream: AsyncThrowingStream<Data, Error>, sampleRate: Double) async -> StreamingPlaybackResult {
         stopInternal()
 
@@ -77,6 +81,7 @@ public final class PCMStreamingAudioPlayer {
         }
     }
 
+    /// Stops playback immediately and returns the interrupted timestamp.
     public func stop() -> Double? {
         let interruptedAt = currentTimeSeconds()
         stopInternal()

@@ -1,7 +1,10 @@
 import Foundation
 
+/// A minimal voice descriptor returned by the ElevenLabs voices endpoint.
 public struct ElevenLabsVoice: Decodable, Sendable {
+    /// Unique voice identifier.
     public let voiceId: String
+    /// Human-readable voice name.
     public let name: String?
 
     enum CodingKeys: String, CodingKey {
@@ -10,20 +13,34 @@ public struct ElevenLabsVoice: Decodable, Sendable {
     }
 }
 
+/// Request payload for text-to-speech synthesis.
 public struct ElevenLabsTTSRequest: Sendable {
+    /// Text to synthesize.
     public var text: String
+    /// Model ID (e.g. `eleven_v3`).
     public var modelId: String?
+    /// Output format (e.g. `mp3_44100_128`, `pcm_44100`).
     public var outputFormat: String?
+    /// Speed multiplier (0.5–2.0).
     public var speed: Double?
+    /// Stability control (0–1). v3 supports 0, 0.5, 1.
     public var stability: Double?
+    /// Similarity boost (0–1).
     public var similarity: Double?
+    /// Style amount (0–1).
     public var style: Double?
+    /// Toggle speaker boost (model dependent).
     public var speakerBoost: Bool?
+    /// Optional seed for repeatability.
     public var seed: UInt32?
+    /// Text normalization mode (`auto`, `on`, `off`).
     public var normalize: String?
+    /// Language code (ISO 639-1).
     public var language: String?
+    /// Streaming latency tier (0–4).
     public var latencyTier: Int?
 
+    /// Creates a request payload.
     public init(
         text: String,
         modelId: String? = nil,
@@ -53,15 +70,21 @@ public struct ElevenLabsTTSRequest: Sendable {
     }
 }
 
+/// HTTP client for ElevenLabs text-to-speech endpoints.
 public struct ElevenLabsTTSClient: Sendable {
+    /// API key for authentication.
     public var apiKey: String
+    /// Timeout for synthesize requests.
     public var requestTimeoutSeconds: TimeInterval
+    /// Timeout for list voices requests.
     public var listVoicesTimeoutSeconds: TimeInterval
+    /// Base URL for the API (defaults to `https://api.elevenlabs.io`).
     public var baseUrl: URL
 
     private let urlSession: URLSession
     private let sleep: @Sendable (TimeInterval) async -> Void
 
+    /// Creates a client.
     public init(
         apiKey: String,
         requestTimeoutSeconds: TimeInterval = 45,
@@ -80,6 +103,7 @@ public struct ElevenLabsTTSClient: Sendable {
         }
     }
 
+    /// Synthesizes speech with a hard timeout that cancels any longer request.
     public func synthesizeWithHardTimeout(
         voiceId: String,
         request: ElevenLabsTTSRequest,
@@ -101,6 +125,7 @@ public struct ElevenLabsTTSClient: Sendable {
         }
     }
 
+    /// Synthesizes speech and returns the full audio payload.
     public func synthesize(voiceId: String, request: ElevenLabsTTSRequest) async throws -> Data {
         var url = baseUrl
         url.appendPathComponent("v1")
@@ -167,6 +192,7 @@ public struct ElevenLabsTTSClient: Sendable {
         ])
     }
 
+    /// Synthesizes speech as a byte stream. Yields audio chunks as they arrive.
     public func streamSynthesize(
         voiceId: String,
         request: ElevenLabsTTSRequest
@@ -238,6 +264,7 @@ public struct ElevenLabsTTSClient: Sendable {
         }
     }
 
+    /// Lists available voices for the account.
     public func listVoices() async throws -> [ElevenLabsVoice] {
         var url = baseUrl
         url.appendPathComponent("v1")
@@ -260,6 +287,7 @@ public struct ElevenLabsTTSClient: Sendable {
         return try JSONDecoder().decode(VoicesResponse.self, from: data).voices
     }
 
+    /// Validates a supported output format string.
     public static func validatedOutputFormat(_ value: String?) -> String? {
         let trimmed = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -267,12 +295,14 @@ public struct ElevenLabsTTSClient: Sendable {
         return trimmed
     }
 
+    /// Validates a 2-letter language code.
     public static func validatedLanguage(_ value: String?) -> String? {
         let normalized = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard normalized.count == 2, normalized.allSatisfy({ $0 >= "a" && $0 <= "z" }) else { return nil }
         return normalized
     }
 
+    /// Validates a normalize option (`auto`, `on`, `off`).
     public static func validatedNormalize(_ value: String?) -> String? {
         let normalized = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard ["auto", "on", "off"].contains(normalized) else { return nil }
