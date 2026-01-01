@@ -5,15 +5,17 @@ import PackageDescription
 let package = Package(
     name: "ElevenLabsKitExample",
     platforms: [
-        .macOS(.v15),
+        .macOS(.v15)
     ],
     dependencies: [
-        .package(path: "../.."),
+        .package(path: "../..")
     ],
     targets: [
         .executableTarget(
             name: "ElevenLabsKitExample",
             dependencies: [
-                .product(name: "ElevenLabsKit", package: "ElevenLabsKit"),
-            ])
-    ])
+                .product(name: "ElevenLabsKit", package: "ElevenLabsKit")
+            ]
+        )
+    ]
+)
