@@ -56,6 +56,10 @@ let data = try await client.synthesize(voiceId: "<voice-id>", request: request)
 - Or open `Examples/ElevenLabsKitExample/Package.swift` in Xcode and run `ElevenLabsKitExample`.
 - Toggle `Streaming` vs `Fetch` to compare streaming vs non-streaming requests.
 
+## Example CLI
+- Run: `cd Examples/ElevenLabsKitCLI && swift run ElevenLabsKitCLI --help`
+- Requires `ELEVENLABS_API_KEY` (or pass `--api-key`).
+
 ## Dev
 - Tests: `swift test`
 - Format: `swiftformat Sources Tests Examples`
