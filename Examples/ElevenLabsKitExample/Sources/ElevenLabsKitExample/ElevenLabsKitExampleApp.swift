@@ -2,6 +2,10 @@ import AVFoundation
 import ElevenLabsKit
 import SwiftUI
 
+#if os(macOS)
+    import AppKit
+#endif
+
 @MainActor
 @main
 struct ElevenLabsKitExampleApp: App {
@@ -57,8 +61,7 @@ private struct ContentView: View {
     @Binding var status: String
     @Binding var audioPlayer: AVAudioPlayer?
 
-    @State private var didAutoFill = false
-    @State private var didAutoListForKey: String?
+    @State private var didBootstrap = false
 
     var body: some View {
         HSplitView {
@@ -117,13 +120,7 @@ private struct ContentView: View {
             }
             .padding()
             .task {
-                await autoFillFromSystemIfNeeded()
-            }
-            .task(id: apiKey) {
-                guard apiKey.isEmpty == false else { return }
-                guard didAutoListForKey != apiKey else { return }
-                didAutoListForKey = apiKey
-                await listVoices()
+                await bootstrapIfNeeded()
             }
 
             GroupBox("Voices") {
@@ -148,15 +145,24 @@ private struct ContentView: View {
         }
     }
 
-    private func autoFillFromSystemIfNeeded() async {
-        guard didAutoFill == false else { return }
-        didAutoFill = true
+    private func bootstrapIfNeeded() async {
+        guard didBootstrap == false else { return }
+        didBootstrap = true
+
+        #if os(macOS)
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+        #endif
 
         if apiKey.isEmpty, let systemKey = ExampleSecrets.discoverElevenLabsAPIKey() {
             apiKey = systemKey
         }
         if voiceId.isEmpty, let systemVoiceId = ExampleSecrets.discoverElevenLabsVoiceID() {
             voiceId = systemVoiceId
+        }
+
+        if apiKey.isEmpty == false {
+            await listVoices()
         }
     }
 
@@ -248,9 +254,12 @@ private struct ContentView: View {
                 return
             }
 
-            audioPlayer = try AVAudioPlayer(data: data)
-            audioPlayer?.play()
-            status = "Playing (MP3)"
+            let stream = AsyncThrowingStream<Data, Error> { cont in
+                cont.yield(data)
+                cont.finish()
+            }
+            let result = await StreamingAudioPlayer.shared.play(stream: stream)
+            status = result.finished ? "Finished (MP3)" : "Stopped (MP3) at \(result.interruptedAt ?? 0)s"
         } catch {
             status = "Error: \(error.localizedDescription)"
         }
