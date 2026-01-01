@@ -10,6 +10,7 @@ Swift helpers for ElevenLabs TTS on Apple platforms (iOS/macOS).
 - Validation helpers for model-specific settings
 
 ## Requirements
+- Swift 6.2 (SwiftPM `swift-tools-version: 6.2`)
 - iOS 17+
 - macOS 15+
 
@@ -51,7 +52,14 @@ let data = try await client.synthesize(voiceId: "<voice-id>", request: request)
 - `latencyTier` is validated to `0..4`.
 
 ## Example App (SwiftUI)
-Open `Examples/ElevenLabsKitExample/Package.swift` in Xcode and run the executable target.
+- Run: `cd Examples/ElevenLabsKitExample && swift run`
+- Or open `Examples/ElevenLabsKitExample/Package.swift` in Xcode and run `ElevenLabsKitExample`.
+- Toggle `Streaming` vs `Fetch` to compare streaming vs non-streaming requests.
+
+## Dev
+- Tests: `swift test`
+- Format: `swiftformat Sources Tests Examples`
+- Lint: `swiftlint lint --strict --config .swiftlint.yml`
 
 ## License
 MIT
