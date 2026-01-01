@@ -57,6 +57,9 @@ private struct ContentView: View {
     @Binding var status: String
     @Binding var audioPlayer: AVAudioPlayer?
 
+    @State private var didAutoFill = false
+    @State private var didAutoListForKey: String?
+
     var body: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: 12) {
@@ -113,18 +116,47 @@ private struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             .padding()
+            .task {
+                await autoFillFromSystemIfNeeded()
+            }
+            .task(id: apiKey) {
+                guard apiKey.isEmpty == false else { return }
+                guard didAutoListForKey != apiKey else { return }
+                didAutoListForKey = apiKey
+                await listVoices()
+            }
 
             GroupBox("Voices") {
-                List(voices, id: \.voiceId) { voice in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(voice.name ?? "Unnamed")
-                        Text(voice.voiceId)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
+                List(selection: $voiceId) {
+                    ForEach(voices, id: \.voiceId) { voice in
+                        voiceRow(voice)
+                            .tag(voice.voiceId)
                     }
                 }
             }
             .padding()
+        }
+    }
+
+    @ViewBuilder
+    private func voiceRow(_ voice: ElevenLabsVoice) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(voice.name ?? "Unnamed")
+            Text(voice.voiceId)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func autoFillFromSystemIfNeeded() async {
+        guard didAutoFill == false else { return }
+        didAutoFill = true
+
+        if apiKey.isEmpty, let systemKey = ExampleSecrets.discoverElevenLabsAPIKey() {
+            apiKey = systemKey
+        }
+        if voiceId.isEmpty, let systemVoiceId = ExampleSecrets.discoverElevenLabsVoiceID() {
+            voiceId = systemVoiceId
         }
     }
 
@@ -138,6 +170,8 @@ private struct ContentView: View {
     }
 
     private func listVoices() async {
+        guard isWorking == false else { return }
+
         isWorking = true
         status = "Listing voices…"
         defer { isWorking = false }
@@ -146,6 +180,10 @@ private struct ContentView: View {
             let client = ElevenLabsTTSClient(apiKey: apiKey)
             voices = try await client.listVoices()
             status = "Voices: \(voices.count)"
+
+            if voiceId.isEmpty || voices.contains(where: { $0.voiceId == voiceId }) == false {
+                voiceId = voices.first?.voiceId ?? voiceId
+            }
         } catch {
             status = "Error: \(error.localizedDescription)"
         }
