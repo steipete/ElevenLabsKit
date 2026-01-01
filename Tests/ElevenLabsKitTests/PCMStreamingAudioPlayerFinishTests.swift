@@ -1,5 +1,5 @@
 import AVFoundation
-import XCTest
+import Testing
 @testable import ElevenLabsKit
 
 @MainActor
@@ -21,9 +21,8 @@ private final class FakePCMPlayerNodeForFinish: PCMPlayerNodeing {
     func currentTimeSeconds() -> Double? { self.currentTimeSecondsValue }
 }
 
-final class PCMStreamingAudioPlayerFinishTests: XCTestCase {
-    @MainActor
-    func testPCMStreamFinishesWhenInputEnds() async {
+@Suite final class PCMStreamingAudioPlayerFinishTests {
+    @MainActor @Test func pcmStreamFinishesWhenInputEnds() async {
         let fakePlayer = FakePCMPlayerNodeForFinish()
         let player = PCMStreamingAudioPlayer(
             playerFactory: { fakePlayer },
@@ -38,13 +37,12 @@ final class PCMStreamingAudioPlayerFinishTests: XCTestCase {
         }
 
         let result = await player.play(stream: stream, sampleRate: 44_100)
-        XCTAssertTrue(result.finished)
-        XCTAssertNil(result.interruptedAt)
-        XCTAssertFalse(fakePlayer.scheduledBuffers.isEmpty)
+        #expect(result.finished)
+        #expect(result.interruptedAt == nil)
+        #expect(fakePlayer.scheduledBuffers.isEmpty == false)
     }
 
-    @MainActor
-    func testEmptyChunksAreIgnored() async {
+    @MainActor @Test func emptyChunksAreIgnored() async {
         let fakePlayer = FakePCMPlayerNodeForFinish()
         let player = PCMStreamingAudioPlayer(
             playerFactory: { fakePlayer },
@@ -60,8 +58,7 @@ final class PCMStreamingAudioPlayerFinishTests: XCTestCase {
         }
 
         let result = await player.play(stream: stream, sampleRate: 44_100)
-        XCTAssertTrue(result.finished)
-        XCTAssertEqual(fakePlayer.scheduledBuffers.count, 1)
+        #expect(result.finished)
+        #expect(fakePlayer.scheduledBuffers.count == 1)
     }
 }
-

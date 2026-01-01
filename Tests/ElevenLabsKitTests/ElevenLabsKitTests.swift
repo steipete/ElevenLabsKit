@@ -1,31 +1,31 @@
-import XCTest
+import Testing
 @testable import ElevenLabsKit
 
-final class ElevenLabsKitTests: XCTestCase {
-    func testValidatedOutputFormat() {
-        XCTAssertEqual(ElevenLabsTTSClient.validatedOutputFormat("mp3_44100_128"), "mp3_44100_128")
-        XCTAssertEqual(ElevenLabsTTSClient.validatedOutputFormat("pcm_44100"), "pcm_44100")
-        XCTAssertEqual(ElevenLabsTTSClient.validatedOutputFormat(" pcm_44100 \n"), "pcm_44100")
-        XCTAssertNil(ElevenLabsTTSClient.validatedOutputFormat(nil))
-        XCTAssertNil(ElevenLabsTTSClient.validatedOutputFormat(""))
-        XCTAssertNil(ElevenLabsTTSClient.validatedOutputFormat(" wav_44100 "))
+@Suite final class ElevenLabsKitTests {
+    @Test func validatedOutputFormat() {
+        #expect(ElevenLabsTTSClient.validatedOutputFormat("mp3_44100_128") == "mp3_44100_128")
+        #expect(ElevenLabsTTSClient.validatedOutputFormat("pcm_44100") == "pcm_44100")
+        #expect(ElevenLabsTTSClient.validatedOutputFormat(" pcm_44100 \n") == "pcm_44100")
+        #expect(ElevenLabsTTSClient.validatedOutputFormat(nil) == nil)
+        #expect(ElevenLabsTTSClient.validatedOutputFormat("") == nil)
+        #expect(ElevenLabsTTSClient.validatedOutputFormat(" wav_44100 ") == nil)
     }
 
-    func testValidatedLanguage() {
-        XCTAssertEqual(ElevenLabsTTSClient.validatedLanguage("en"), "en")
-        XCTAssertEqual(ElevenLabsTTSClient.validatedLanguage(" EN "), "en")
-        XCTAssertNil(ElevenLabsTTSClient.validatedLanguage("e"))
-        XCTAssertNil(ElevenLabsTTSClient.validatedLanguage("eng"))
-        XCTAssertNil(ElevenLabsTTSClient.validatedLanguage("e1"))
-        XCTAssertNil(ElevenLabsTTSClient.validatedLanguage(""))
+    @Test func validatedLanguage() {
+        #expect(ElevenLabsTTSClient.validatedLanguage("en") == "en")
+        #expect(ElevenLabsTTSClient.validatedLanguage(" EN ") == "en")
+        #expect(ElevenLabsTTSClient.validatedLanguage("e") == nil)
+        #expect(ElevenLabsTTSClient.validatedLanguage("eng") == nil)
+        #expect(ElevenLabsTTSClient.validatedLanguage("e1") == nil)
+        #expect(ElevenLabsTTSClient.validatedLanguage("") == nil)
     }
 
-    func testValidatedNormalize() {
-        XCTAssertEqual(ElevenLabsTTSClient.validatedNormalize("auto"), "auto")
-        XCTAssertEqual(ElevenLabsTTSClient.validatedNormalize(" ON "), "on")
-        XCTAssertEqual(ElevenLabsTTSClient.validatedNormalize("off"), "off")
-        XCTAssertNil(ElevenLabsTTSClient.validatedNormalize(nil))
-        XCTAssertNil(ElevenLabsTTSClient.validatedNormalize(""))
-        XCTAssertNil(ElevenLabsTTSClient.validatedNormalize("maybe"))
+    @Test func validatedNormalize() {
+        #expect(ElevenLabsTTSClient.validatedNormalize("auto") == "auto")
+        #expect(ElevenLabsTTSClient.validatedNormalize(" ON ") == "on")
+        #expect(ElevenLabsTTSClient.validatedNormalize("off") == "off")
+        #expect(ElevenLabsTTSClient.validatedNormalize(nil) == nil)
+        #expect(ElevenLabsTTSClient.validatedNormalize("") == nil)
+        #expect(ElevenLabsTTSClient.validatedNormalize("maybe") == nil)
     }
 }

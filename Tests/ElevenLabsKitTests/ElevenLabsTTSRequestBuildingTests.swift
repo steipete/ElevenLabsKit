@@ -1,9 +1,9 @@
 import Foundation
-import XCTest
+import Testing
 @testable import ElevenLabsKit
 
-final class ElevenLabsTTSRequestBuildingTests: XCTestCase {
-    func testBuildSynthesizeRequestSetsAcceptHeaderFromOutputFormat() {
+@Suite final class ElevenLabsTTSRequestBuildingTests {
+    @Test func buildSynthesizeRequestSetsAcceptHeaderFromOutputFormat() {
         let url = URL(string: "https://example.com")!
         let body = Data([0x01, 0x02, 0x03])
 
@@ -13,7 +13,7 @@ final class ElevenLabsTTSRequestBuildingTests: XCTestCase {
             body: body,
             timeoutSeconds: 1,
             outputFormat: "pcm_44100")
-        XCTAssertEqual(pcm.value(forHTTPHeaderField: "Accept"), "audio/pcm")
+        #expect(pcm.value(forHTTPHeaderField: "Accept") == "audio/pcm")
 
         let mp3 = ElevenLabsTTSClient.buildSynthesizeRequest(
             url: url,
@@ -21,7 +21,7 @@ final class ElevenLabsTTSRequestBuildingTests: XCTestCase {
             body: body,
             timeoutSeconds: 1,
             outputFormat: "mp3_44100_128")
-        XCTAssertEqual(mp3.value(forHTTPHeaderField: "Accept"), "audio/mpeg")
+        #expect(mp3.value(forHTTPHeaderField: "Accept") == "audio/mpeg")
 
         let fallback = ElevenLabsTTSClient.buildSynthesizeRequest(
             url: url,
@@ -29,7 +29,6 @@ final class ElevenLabsTTSRequestBuildingTests: XCTestCase {
             body: body,
             timeoutSeconds: 1,
             outputFormat: nil)
-        XCTAssertEqual(fallback.value(forHTTPHeaderField: "Accept"), "audio/mpeg")
+        #expect(fallback.value(forHTTPHeaderField: "Accept") == "audio/mpeg")
     }
 }
-

@@ -1,5 +1,5 @@
 import AVFoundation
-import XCTest
+import Testing
 @testable import ElevenLabsKit
 
 @MainActor
@@ -30,9 +30,8 @@ private final class FakePCMPlayerNode: PCMPlayerNodeing {
     }
 }
 
-final class PCMStreamingAudioPlayerTests: XCTestCase {
-    @MainActor
-    func testStopDuringPCMStreamReturnsInterruptedResult() async {
+@Suite final class PCMStreamingAudioPlayerTests {
+    @MainActor @Test func stopDuringPCMStreamReturnsInterruptedResult() async {
         let fakePlayer = FakePCMPlayerNode()
         fakePlayer.currentTimeSecondsValue = 1.25
         let player = PCMStreamingAudioPlayer(
@@ -60,7 +59,7 @@ final class PCMStreamingAudioPlayerTests: XCTestCase {
         continuation?.finish()
 
         let result = await task.value
-        XCTAssertFalse(result.finished)
-        XCTAssertEqual(interruptedAt, 1.25)
+        #expect(result.finished == false)
+        #expect(interruptedAt == 1.25)
     }
 }
