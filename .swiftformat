@@ -10,5 +10,4 @@
 --nospaceoperators ...
 --self init-only
 --stripunusedargs always
---exclude .build,Packages,DerivedData,.swiftpm,Examples/ElevenLabsKitExample/.build
-
+--exclude .build,Packages,DerivedData,.swiftpm,Examples/ElevenLabsKitExample/.build,Examples/ElevenLabsKitCLI/.build
