@@ -59,16 +59,25 @@ public struct ElevenLabsTTSClient: Sendable {
     public var listVoicesTimeoutSeconds: TimeInterval
     public var baseUrl: URL
 
+    private let urlSession: URLSession
+    private let sleep: @Sendable (TimeInterval) async -> Void
+
     public init(
         apiKey: String,
         requestTimeoutSeconds: TimeInterval = 45,
         listVoicesTimeoutSeconds: TimeInterval = 15,
-        baseUrl: URL = URL(string: "https://api.elevenlabs.io")!)
+        baseUrl: URL = URL(string: "https://api.elevenlabs.io")!,
+        urlSession: URLSession = .shared,
+        sleep: (@Sendable (TimeInterval) async -> Void)? = nil)
     {
         self.apiKey = apiKey
         self.requestTimeoutSeconds = requestTimeoutSeconds
         self.listVoicesTimeoutSeconds = listVoicesTimeoutSeconds
         self.baseUrl = baseUrl
+        self.urlSession = urlSession
+        self.sleep = sleep ?? { seconds in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        }
     }
 
     public func synthesizeWithHardTimeout(
@@ -81,7 +90,7 @@ public struct ElevenLabsTTSClient: Sendable {
                 try await self.synthesize(voiceId: voiceId, request: request)
             }
             group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(hardTimeoutSeconds * 1_000_000_000))
+                await self.sleep(hardTimeoutSeconds)
                 throw NSError(domain: "ElevenLabsTTS", code: 408, userInfo: [
                     NSLocalizedDescriptionKey: "ElevenLabs TTS timed out after \(hardTimeoutSeconds)s",
                 ])
@@ -110,7 +119,7 @@ public struct ElevenLabsTTSClient: Sendable {
                 outputFormat: request.outputFormat)
 
             do {
-                let (data, response) = try await URLSession.shared.data(for: req)
+                let (data, response) = try await self.urlSession.data(for: req)
                 if let http = response as? HTTPURLResponse {
                     let contentType = (http.value(forHTTPHeaderField: "Content-Type") ?? "unknown").lowercased()
                     if http.statusCode == 429 || http.statusCode >= 500 {
@@ -122,7 +131,7 @@ public struct ElevenLabsTTSClient: Sendable {
                             let retryAfter = Double(http.value(forHTTPHeaderField: "Retry-After") ?? "")
                             let baseDelay = [0.25, 0.75, 1.5][attempt]
                             let delaySeconds = max(baseDelay, retryAfter ?? 0)
-                            try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+                            await self.sleep(delaySeconds)
                             continue
                         }
                         throw lastError!
@@ -146,7 +155,7 @@ public struct ElevenLabsTTSClient: Sendable {
             } catch {
                 lastError = error
                 if attempt < 2 {
-                    try? await Task.sleep(nanoseconds: UInt64([0.25, 0.75, 1.5][attempt] * 1_000_000_000))
+                    await self.sleep([0.25, 0.75, 1.5][attempt])
                     continue
                 }
                 throw error
@@ -181,7 +190,7 @@ public struct ElevenLabsTTSClient: Sendable {
                     }
                     req.setValue(self.apiKey, forHTTPHeaderField: "xi-api-key")
 
-                    let (bytes, response) = try await URLSession.shared.bytes(for: req)
+                    let (bytes, response) = try await self.urlSession.bytes(for: req)
                     guard let http = response as? HTTPURLResponse else {
                         throw NSError(domain: "ElevenLabsTTS", code: 1, userInfo: [
                             NSLocalizedDescriptionKey: "ElevenLabs invalid response",
@@ -236,7 +245,7 @@ public struct ElevenLabsTTSClient: Sendable {
         req.timeoutInterval = self.listVoicesTimeoutSeconds
         req.setValue(self.apiKey, forHTTPHeaderField: "xi-api-key")
 
-        let (data, response) = try await URLSession.shared.data(for: req)
+        let (data, response) = try await self.urlSession.data(for: req)
         if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
             let message = Self.truncatedErrorBody(data)
             throw NSError(domain: "ElevenLabsTTS", code: http.statusCode, userInfo: [
