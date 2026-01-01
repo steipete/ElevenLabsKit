@@ -102,13 +102,12 @@ public struct ElevenLabsTTSClient: Sendable {
 
         var lastError: Error?
         for attempt in 0..<3 {
-            var req = URLRequest(url: url)
-            req.httpMethod = "POST"
-            req.httpBody = body
-            req.timeoutInterval = self.requestTimeoutSeconds
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.setValue("audio/mpeg", forHTTPHeaderField: "Accept")
-            req.setValue(self.apiKey, forHTTPHeaderField: "xi-api-key")
+            let req = Self.buildSynthesizeRequest(
+                url: url,
+                apiKey: self.apiKey,
+                body: body,
+                timeoutSeconds: self.requestTimeoutSeconds,
+                outputFormat: request.outputFormat)
 
             do {
                 let (data, response) = try await URLSession.shared.data(for: req)
@@ -136,7 +135,7 @@ public struct ElevenLabsTTSClient: Sendable {
                         ])
                     }
 
-                    if !contentType.contains("audio") {
+                    if !Self.isAudioContentType(contentType, outputFormat: request.outputFormat) {
                         let message = Self.truncatedErrorBody(data)
                         throw NSError(domain: "ElevenLabsTTS", code: 415, userInfo: [
                             NSLocalizedDescriptionKey: "ElevenLabs returned non-audio ct=\(contentType) \(message)",
@@ -336,6 +335,23 @@ public struct ElevenLabsTTSClient: Sendable {
         if normalized.hasPrefix("pcm_") { return "audio/pcm" }
         if normalized.hasPrefix("mp3_") { return "audio/mpeg" }
         return nil
+    }
+
+    static func buildSynthesizeRequest(
+        url: URL,
+        apiKey: String,
+        body: Data,
+        timeoutSeconds: TimeInterval,
+        outputFormat: String?) -> URLRequest
+    {
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.httpBody = body
+        req.timeoutInterval = timeoutSeconds
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue(Self.acceptHeader(for: outputFormat) ?? "audio/mpeg", forHTTPHeaderField: "Accept")
+        req.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
+        return req
     }
 
     private static func isAudioContentType(_ contentType: String, outputFormat: String?) -> Bool {
