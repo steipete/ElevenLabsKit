@@ -26,7 +26,15 @@ jobs:
           xcrun swift --version
       - name: Assert Swift 6.2
         run: xcrun swift --version 2>&1 | grep -E "Swift version 6\\.2"
-      - name: Swift test
-        run: swift test -Xswiftc -warnings-as-errors
+      - name: Install linters
+        run: brew install swiftlint swiftformat
+      - name: SwiftFormat
+        run: swiftformat Sources Tests Examples --lint
+      - name: SwiftLint
+        run: swiftlint lint --strict --config .swiftlint.yml
+      - name: Swift test + coverage
+        run: swift test --enable-code-coverage -Xswiftc -warnings-as-errors
+      - name: Assert 70% coverage
+        run: ./scripts/check-coverage.sh 70
       - name: Swift build example
         run: (cd Examples/ElevenLabsKitExample && swift build -Xswiftc -warnings-as-errors)
