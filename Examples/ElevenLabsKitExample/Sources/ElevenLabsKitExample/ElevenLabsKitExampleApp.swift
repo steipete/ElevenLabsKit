@@ -219,12 +219,34 @@ private struct ContentView: View {
         let client = ElevenLabsTTSClient(apiKey: apiKey)
         let stream = client.streamSynthesize(voiceId: voiceId, request: request)
 
-        if let sampleRate = TalkTTSValidation.pcmSampleRate(from: normalizedOutput) {
-            let result = await PCMStreamingAudioPlayer.shared.play(stream: stream, sampleRate: sampleRate)
-            status = result.finished ? "Finished (PCM)" : "Stopped (PCM) at \(result.interruptedAt ?? 0)s"
-        } else {
-            let result = await StreamingAudioPlayer.shared.play(stream: stream)
-            status = result.finished ? "Finished (MP3)" : "Stopped (MP3) at \(result.interruptedAt ?? 0)s"
+        do {
+            var iterator = stream.makeAsyncIterator()
+            guard let firstChunk = try await iterator.next() else {
+                status = "No audio returned"
+                return
+            }
+
+            let detected = AudioKind.detect(from: firstChunk, requestedOutput: normalizedOutput)
+            let replayStream = makeReplayStream(
+                iterator: iterator,
+                firstChunk: firstChunk,
+                stripWavHeader: detected == .wav
+            )
+
+            switch detected {
+            case .pcm, .wav:
+                guard let sampleRate = TalkTTSValidation.pcmSampleRate(from: normalizedOutput) else {
+                    status = "Invalid PCM output format"
+                    return
+                }
+                let result = await PCMStreamingAudioPlayer.shared.play(stream: replayStream, sampleRate: sampleRate)
+                status = result.finished ? "Finished (PCM)" : "Stopped (PCM) at \(result.interruptedAt ?? 0)s"
+            case .mp3, .unknown:
+                let result = await StreamingAudioPlayer.shared.play(stream: replayStream)
+                status = result.finished ? "Finished (MP3)" : "Stopped (MP3) at \(result.interruptedAt ?? 0)s"
+            }
+        } catch {
+            status = "Error: \(error.localizedDescription)"
         }
     }
 
@@ -244,22 +266,32 @@ private struct ContentView: View {
             let client = ElevenLabsTTSClient(apiKey: apiKey)
             let data = try await client.synthesize(voiceId: voiceId, request: request)
 
-            if let sampleRate = TalkTTSValidation.pcmSampleRate(from: normalizedOutput) {
+            let detected = AudioKind.detect(from: data, requestedOutput: normalizedOutput)
+
+            switch detected {
+            case .pcm:
+                guard let sampleRate = TalkTTSValidation.pcmSampleRate(from: normalizedOutput) else {
+                    status = "Invalid PCM output format"
+                    return
+                }
                 let stream = AsyncThrowingStream<Data, Error> { cont in
                     cont.yield(data)
                     cont.finish()
                 }
                 let result = await PCMStreamingAudioPlayer.shared.play(stream: stream, sampleRate: sampleRate)
                 status = result.finished ? "Finished (PCM)" : "Stopped (PCM) at \(result.interruptedAt ?? 0)s"
-                return
+            case .wav, .mp3:
+                audioPlayer = try AVAudioPlayer(data: data)
+                audioPlayer?.play()
+                status = detected == .wav ? "Playing (WAV)" : "Playing (MP3)"
+            case .unknown:
+                let stream = AsyncThrowingStream<Data, Error> { cont in
+                    cont.yield(data)
+                    cont.finish()
+                }
+                let result = await StreamingAudioPlayer.shared.play(stream: stream)
+                status = result.finished ? "Finished (MP3)" : "Stopped (MP3) at \(result.interruptedAt ?? 0)s"
             }
-
-            let stream = AsyncThrowingStream<Data, Error> { cont in
-                cont.yield(data)
-                cont.finish()
-            }
-            let result = await StreamingAudioPlayer.shared.play(stream: stream)
-            status = result.finished ? "Finished (MP3)" : "Stopped (MP3) at \(result.interruptedAt ?? 0)s"
         } catch {
             status = "Error: \(error.localizedDescription)"
         }
@@ -273,4 +305,92 @@ private struct ContentView: View {
         isWorking = false
         status = "Stopped"
     }
+}
+
+private enum AudioKind: String {
+    case wav
+    case mp3
+    case pcm
+    case unknown
+
+    static func detect(from data: Data, requestedOutput: String) -> AudioKind {
+        if data.count >= 12,
+           data.prefix(4) == Data([0x52, 0x49, 0x46, 0x46]),
+           data.dropFirst(8).prefix(4) == Data([0x57, 0x41, 0x56, 0x45])
+        {
+            return .wav
+        }
+
+        if data.count >= 3, data.prefix(3) == Data([0x49, 0x44, 0x33]) {
+            return .mp3
+        }
+
+        if data.count >= 2 {
+            let bytes = [UInt8](data.prefix(2))
+            if bytes[0] == 0xFF, (bytes[1] & 0xE0) == 0xE0 {
+                return .mp3
+            }
+        }
+
+        if requestedOutput.lowercased().hasPrefix("pcm_") {
+            return .pcm
+        }
+
+        return .unknown
+    }
+}
+
+private func makeReplayStream(
+    iterator: AsyncThrowingStream<Data, Error>.Iterator,
+    firstChunk: Data,
+    stripWavHeader: Bool
+) -> AsyncThrowingStream<Data, Error> {
+    AsyncThrowingStream { continuation in
+        let sendableIterator = UnsafeSendableIterator(iterator: iterator)
+        Task {
+            var iterator = sendableIterator.iterator
+            var headerBuffer = Data()
+            var headerStripped = stripWavHeader == false
+
+            func drainHeaderIfPossible() {
+                guard headerStripped == false else { return }
+                guard headerBuffer.count >= 44 else { return }
+                let remainder = headerBuffer.dropFirst(44)
+                if remainder.isEmpty == false {
+                    continuation.yield(Data(remainder))
+                }
+                headerBuffer.removeAll(keepingCapacity: true)
+                headerStripped = true
+            }
+
+            do {
+                if stripWavHeader {
+                    headerBuffer.append(firstChunk)
+                    drainHeaderIfPossible()
+                } else {
+                    continuation.yield(firstChunk)
+                }
+
+                while let chunk = try await iterator.next() {
+                    if stripWavHeader, headerStripped == false {
+                        headerBuffer.append(chunk)
+                        drainHeaderIfPossible()
+                        continue
+                    }
+                    continuation.yield(chunk)
+                }
+
+                if headerStripped == false, headerBuffer.isEmpty == false {
+                    continuation.yield(headerBuffer)
+                }
+                continuation.finish()
+            } catch {
+                continuation.finish(throwing: error)
+            }
+        }
+    }
+}
+
+private struct UnsafeSendableIterator: @unchecked Sendable {
+    var iterator: AsyncThrowingStream<Data, Error>.Iterator
 }
