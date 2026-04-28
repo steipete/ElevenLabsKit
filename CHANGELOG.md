@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 — 2026-04-28
 
-- N/A.
+- Refresh package metadata for the patch release after dependency verification.
 
 ## 0.1.0 — 2026-01-19
 
