@@ -2,9 +2,9 @@
 import Foundation
 import Testing
 
-@Suite final class ElevenLabsTTSRequestBuildingTests {
-    @Test func buildSynthesizeRequestSetsAcceptHeaderFromOutputFormat() {
-        let url = URL(string: "https://example.com")!
+final class ElevenLabsTTSRequestBuildingTests {
+    @Test func `build synthesize request sets accept header from output format`() throws {
+        let url = try #require(URL(string: "https://example.com"))
         let body = Data([0x01, 0x02, 0x03])
 
         let pcm = ElevenLabsTTSClient.buildSynthesizeRequest(

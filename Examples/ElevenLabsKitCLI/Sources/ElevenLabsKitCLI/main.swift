@@ -601,8 +601,13 @@ private actor FileSink {
 
 private struct CLIError: LocalizedError {
     let message: String
-    init(_ message: String) { self.message = message }
-    var errorDescription: String? { message }
+    init(_ message: String) {
+        self.message = message
+    }
+
+    var errorDescription: String? {
+        message
+    }
 }
 
 private func requireValue(_ args: inout [String], flag: String) throws -> String {

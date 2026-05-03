@@ -1,7 +1,7 @@
 import AudioToolbox
 import Foundation
 
-struct AudioToolboxClient: Sendable {
+struct AudioToolboxClient {
     var fileStreamOpen: @Sendable (
         UnsafeMutableRawPointer?,
         AudioFileStream_PropertyListenerProc,

@@ -54,8 +54,13 @@ class URLProtocolStub: URLProtocol {
         return URLSession(configuration: config)
     }
 
-    override class func canInit(with _: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override class func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
 
     override func startLoading() {
         Self.storage.getRequestObserver()?(request)

@@ -30,8 +30,8 @@ private final class FakePCMPlayerNode: PCMPlayerNodeing {
     }
 }
 
-@Suite final class PCMStreamingAudioPlayerTests {
-    @MainActor @Test func stopDuringPCMStreamReturnsInterruptedResult() async {
+final class PCMStreamingAudioPlayerTests {
+    @MainActor @Test func `stop during PCM stream returns interrupted result`() async {
         let fakePlayer = FakePCMPlayerNode()
         fakePlayer.currentTimeSecondsValue = 1.25
         let player = PCMStreamingAudioPlayer(

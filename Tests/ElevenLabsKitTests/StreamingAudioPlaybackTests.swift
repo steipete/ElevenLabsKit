@@ -8,8 +8,13 @@ import Testing
     private final class Flag: @unchecked Sendable {
         private let lock = NSLock()
         private var value = false
-        func set() { lock.lock(); value = true; lock.unlock() }
-        func get() -> Bool { lock.lock(); defer { lock.unlock() }; return value }
+        func set() {
+            lock.lock(); value = true; lock.unlock()
+        }
+
+        func get() -> Bool {
+            lock.lock(); defer { lock.unlock() }; return value
+        }
     }
 
     private final class BufferStore: @unchecked Sendable {
@@ -34,7 +39,7 @@ import Testing
         }
     }
 
-    @Test func startOpenFailureClosesStream() {
+    @Test func `start open failure closes stream`() {
         let closeCalled = Flag()
 
         let audio = AudioToolboxClient(
@@ -70,7 +75,7 @@ import Testing
         #expect(closeCalled.get())
     }
 
-    @Test func appendParseErrorStopsAndTeardowns() {
+    @Test func `append parse error stops and teardowns`() {
         let stopCalled = Flag()
         let disposeCalled = Flag()
         let closeCalled = Flag()
@@ -125,7 +130,7 @@ import Testing
         #expect(closeCalled.get())
     }
 
-    @Test func handlePacketsThenFinishInputEnqueuesAndStarts() {
+    @Test func `handle packets then finish input enqueues and starts`() {
         let enqueueCalled = Flag()
         let startCalled = Flag()
         let stopCalled = Flag()
@@ -190,7 +195,7 @@ import Testing
         #expect(stopCalled.get())
     }
 
-    @Test func finishUnblocksPendingBufferWaiters() {
+    @Test func `finish unblocks pending buffer waiters`() {
         let done = DispatchSemaphore(value: 0)
 
         let audio = AudioToolboxClient(
@@ -264,7 +269,7 @@ import Testing
         #expect(result == .success)
     }
 
-    @Test func stopReturnsNilWhenSampleTimeIsNaN() {
+    @Test func `stop returns nil when sample time is na N`() {
         let stopCalled = Flag()
 
         let audio = AudioToolboxClient(

@@ -16,13 +16,21 @@ private final class FakePCMPlayerNodeForFinish: PCMPlayerNodeing {
         await Task.yield()
     }
 
-    func play() { isPlaying = true }
-    func stop() { isPlaying = false }
-    func currentTimeSeconds() -> Double? { currentTimeSecondsValue }
+    func play() {
+        isPlaying = true
+    }
+
+    func stop() {
+        isPlaying = false
+    }
+
+    func currentTimeSeconds() -> Double? {
+        currentTimeSecondsValue
+    }
 }
 
-@Suite final class PCMStreamingAudioPlayerFinishTests {
-    @MainActor @Test func pcmStreamFinishesWhenInputEnds() async {
+final class PCMStreamingAudioPlayerFinishTests {
+    @MainActor @Test func `pcm stream finishes when input ends`() async {
         let fakePlayer = FakePCMPlayerNodeForFinish()
         let player = PCMStreamingAudioPlayer(
             playerFactory: { fakePlayer },
@@ -42,7 +50,7 @@ private final class FakePCMPlayerNodeForFinish: PCMPlayerNodeing {
         #expect(fakePlayer.scheduledBuffers.isEmpty == false)
     }
 
-    @MainActor @Test func emptyChunksAreIgnored() async {
+    @MainActor @Test func `empty chunks are ignored`() async {
         let fakePlayer = FakePCMPlayerNodeForFinish()
         let player = PCMStreamingAudioPlayer(
             playerFactory: { fakePlayer },

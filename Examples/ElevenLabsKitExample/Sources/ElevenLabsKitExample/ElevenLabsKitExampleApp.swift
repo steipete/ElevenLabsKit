@@ -13,7 +13,9 @@ struct ElevenLabsKitExampleApp: App {
         case streaming = "Streaming"
         case fetch = "Fetch"
 
-        var id: String { rawValue }
+        var id: String {
+            rawValue
+        }
     }
 
     @State private var apiKey: String = ""
@@ -238,7 +240,6 @@ private struct ContentView: View {
         }
     }
 
-    @ViewBuilder
     private func voiceRow(_ voice: ElevenLabsVoice) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(voice.name ?? "Unnamed")
@@ -524,7 +525,9 @@ private enum NormalizeOption: String, CaseIterable, Identifiable {
     case on
     case off
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var title: String {
         switch self {

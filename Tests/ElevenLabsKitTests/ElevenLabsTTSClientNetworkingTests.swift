@@ -5,12 +5,17 @@ import Testing
 @Suite(.serialized) final class ElevenLabsTTSClientNetworkingTests {
     private actor SleepRecorder {
         private var calls: [TimeInterval] = []
-        func record(_ seconds: TimeInterval) { calls.append(seconds) }
-        func snapshot() -> [TimeInterval] { calls }
+        func record(_ seconds: TimeInterval) {
+            calls.append(seconds)
+        }
+
+        func snapshot() -> [TimeInterval] {
+            calls
+        }
     }
 
-    @Test func synthesizeReturnsDataOnSuccess() async throws {
-        let url = URL(string: "https://example.invalid/v1/text-to-speech/voice")!
+    @Test func `synthesize returns data on success`() async throws {
+        let url = try #require(URL(string: "https://example.invalid/v1/text-to-speech/voice"))
         URLProtocolStub.setStubs([
             .init(
                 response: HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [
@@ -23,15 +28,15 @@ import Testing
         defer { URLProtocolStub.setStubs([]) }
 
         let session = URLProtocolStub.makeSession()
-        let client = ElevenLabsTTSClient(apiKey: "k", baseUrl: URL(string: "https://example.invalid")!, urlSession: session)
+        let client = try ElevenLabsTTSClient(apiKey: "k", baseUrl: #require(URL(string: "https://example.invalid")), urlSession: session)
         let request = ElevenLabsTTSRequest(text: "hi", outputFormat: "mp3_44100_128")
 
         let data = try await client.synthesize(voiceId: "voice", request: request)
         #expect(data == Data([0x01, 0x02, 0x03]))
     }
 
-    @Test func synthesizeRetriesOn500WithoutSleepingInTests() async throws {
-        let url = URL(string: "https://example.invalid/v1/text-to-speech/voice")!
+    @Test func `synthesize retries on 500 without sleeping in tests`() async throws {
+        let url = try #require(URL(string: "https://example.invalid/v1/text-to-speech/voice"))
         URLProtocolStub.setStubs([
             .init(
                 response: HTTPURLResponse(url: url, statusCode: 500, httpVersion: nil, headerFields: [
@@ -52,9 +57,9 @@ import Testing
 
         let sleepRecorder = SleepRecorder()
         let session = URLProtocolStub.makeSession()
-        let client = ElevenLabsTTSClient(
+        let client = try ElevenLabsTTSClient(
             apiKey: "k",
-            baseUrl: URL(string: "https://example.invalid")!,
+            baseUrl: #require(URL(string: "https://example.invalid")),
             urlSession: session,
             sleep: { seconds in await sleepRecorder.record(seconds) }
         )
@@ -64,8 +69,8 @@ import Testing
         #expect(await (sleepRecorder.snapshot()).count == 1)
     }
 
-    @Test func synthesizeAcceptsOctetStreamForPCM() async throws {
-        let url = URL(string: "https://example.invalid/v1/text-to-speech/voice")!
+    @Test func `synthesize accepts octet stream for PCM`() async throws {
+        let url = try #require(URL(string: "https://example.invalid/v1/text-to-speech/voice"))
         URLProtocolStub.setStubs([
             .init(
                 response: HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [
@@ -78,13 +83,13 @@ import Testing
         defer { URLProtocolStub.setStubs([]) }
 
         let session = URLProtocolStub.makeSession()
-        let client = ElevenLabsTTSClient(apiKey: "k", baseUrl: URL(string: "https://example.invalid")!, urlSession: session)
+        let client = try ElevenLabsTTSClient(apiKey: "k", baseUrl: #require(URL(string: "https://example.invalid")), urlSession: session)
         let data = try await client.synthesize(voiceId: "voice", request: ElevenLabsTTSRequest(text: "hi", outputFormat: "pcm_44100"))
         #expect(data.count == 4)
     }
 
-    @Test func synthesizeThrowsForNonAudioContentType() async {
-        let url = URL(string: "https://example.invalid/v1/text-to-speech/voice")!
+    @Test func `synthesize throws for non audio content type`() async throws {
+        let url = try #require(URL(string: "https://example.invalid/v1/text-to-speech/voice"))
         URLProtocolStub.setStubs([
             .init(
                 response: HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [
@@ -97,15 +102,15 @@ import Testing
         defer { URLProtocolStub.setStubs([]) }
 
         let session = URLProtocolStub.makeSession()
-        let client = ElevenLabsTTSClient(apiKey: "k", baseUrl: URL(string: "https://example.invalid")!, urlSession: session)
+        let client = try ElevenLabsTTSClient(apiKey: "k", baseUrl: #require(URL(string: "https://example.invalid")), urlSession: session)
 
         await #expect(throws: Error.self) {
             _ = try await client.synthesize(voiceId: "voice", request: ElevenLabsTTSRequest(text: "hi", outputFormat: "mp3_44100_128"))
         }
     }
 
-    @Test func listVoicesDecodesResponse() async throws {
-        let url = URL(string: "https://example.invalid/v1/voices")!
+    @Test func `list voices decodes response`() async throws {
+        let url = try #require(URL(string: "https://example.invalid/v1/voices"))
         URLProtocolStub.setStubs([
             .init(
                 response: HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil),
@@ -116,7 +121,7 @@ import Testing
         defer { URLProtocolStub.setStubs([]) }
 
         let session = URLProtocolStub.makeSession()
-        let client = ElevenLabsTTSClient(apiKey: "k", baseUrl: URL(string: "https://example.invalid")!, urlSession: session)
+        let client = try ElevenLabsTTSClient(apiKey: "k", baseUrl: #require(URL(string: "https://example.invalid")), urlSession: session)
         let voices = try await client.listVoices()
         #expect(voices.count == 2)
         #expect(voices[0].voiceId == "v1")
@@ -124,8 +129,8 @@ import Testing
         #expect(voices[1].voiceId == "v2")
     }
 
-    @Test func streamSynthesizeBuildsURLWithOutputFormatAndLatencyTier() async throws {
-        let url = URL(string: "https://example.invalid/v1/text-to-speech/voice/stream?output_format=mp3_44100_128&optimize_streaming_latency=4")!
+    @Test func `stream synthesize builds URL with output format and latency tier`() async throws {
+        let url = try #require(URL(string: "https://example.invalid/v1/text-to-speech/voice/stream?output_format=mp3_44100_128&optimize_streaming_latency=4"))
         URLProtocolStub.setStubs([
             .init(
                 response: HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: [
@@ -144,7 +149,7 @@ import Testing
         URLProtocolStub.setRequestObserver { request in requestedURL = request.url }
 
         let session = URLProtocolStub.makeSession()
-        let client = ElevenLabsTTSClient(apiKey: "k", baseUrl: URL(string: "https://example.invalid")!, urlSession: session)
+        let client = try ElevenLabsTTSClient(apiKey: "k", baseUrl: #require(URL(string: "https://example.invalid")), urlSession: session)
         let request = ElevenLabsTTSRequest(text: "hi", outputFormat: "mp3_44100_128", latencyTier: 4)
 
         var chunks: [Data] = []

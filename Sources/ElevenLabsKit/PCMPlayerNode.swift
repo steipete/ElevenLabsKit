@@ -19,7 +19,9 @@ final class AVAudioPlayerNodeAdapter: PCMPlayerNodeing {
         self.node = node
     }
 
-    var isPlaying: Bool { node.isPlaying }
+    var isPlaying: Bool {
+        node.isPlaying
+    }
 
     func attach(to engine: AVAudioEngine) {
         engine.attach(node)
