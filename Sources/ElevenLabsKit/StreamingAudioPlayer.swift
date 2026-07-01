@@ -23,6 +23,7 @@ public final class StreamingAudioPlayer: NSObject {
 
     private let logger = Logger(subsystem: "com.steipete.clawdis", category: "talk.tts.stream")
     private var playback: StreamingAudioPlayback?
+    private var streamTask: Task<Void, Never>?
 
     /// Starts playing a streaming audio payload.
     public func play(stream: AsyncThrowingStream<Data, Error>) async -> StreamingPlaybackResult {
@@ -31,11 +32,11 @@ public final class StreamingAudioPlayer: NSObject {
         let playback = StreamingAudioPlayback(logger: logger)
         self.playback = playback
 
-        return await withCheckedContinuation { continuation in
+        let result = await withCheckedContinuation { continuation in
             playback.setContinuation(continuation)
             playback.start()
 
-            Task.detached {
+            self.streamTask = Task.detached {
                 do {
                     for try await chunk in stream {
                         playback.append(chunk)
@@ -46,6 +47,11 @@ public final class StreamingAudioPlayer: NSObject {
                 }
             }
         }
+        if self.playback === playback {
+            self.playback = nil
+            streamTask = nil
+        }
+        return result
     }
 
     /// Stops playback immediately and returns the interrupted timestamp.
@@ -57,6 +63,8 @@ public final class StreamingAudioPlayer: NSObject {
     }
 
     private func stopInternal() {
+        streamTask?.cancel()
+        streamTask = nil
         guard let playback else { return }
         let interruptedAt = playback.stop(immediate: true)
         finish(playback: playback, result: StreamingPlaybackResult(finished: false, interruptedAt: interruptedAt))

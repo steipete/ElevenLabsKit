@@ -6,6 +6,7 @@ final class TalkTTSValidationTests {
         let resolved = TalkTTSValidation.resolveSpeed(speed: nil, rateWPM: 175)
         #expect(resolved != nil)
         #expect(abs((resolved ?? 0) - 1.0) < 0.0001)
+        #expect(TalkTTSValidation.resolveSpeed(speed: nil, rateWPM: 210) == 1.2)
         #expect(TalkTTSValidation.resolveSpeed(speed: nil, rateWPM: 400) == nil)
     }
 

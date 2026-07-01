@@ -48,8 +48,9 @@ let data = try await client.synthesize(voiceId: "<voice-id>", request: request)
 - PCM: `PCMStreamingAudioPlayer.shared.play(stream:sampleRate:)`
 
 ## Validation Notes
+- `speed` is restricted to the provider-supported `0.7...1.2` range.
 - `stability` for `eleven_v3` is restricted to `0.0`, `0.5`, or `1.0`.
-- `latencyTier` is validated to `0..4`.
+- `latencyTier` is validated to `0...4`; ElevenLabs now marks this optimization as deprecated.
 
 ## Example App (SwiftUI)
 - Run: `cd Examples/ElevenLabsKitExample && swift run`

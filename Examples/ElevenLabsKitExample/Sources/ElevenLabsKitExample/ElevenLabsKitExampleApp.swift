@@ -142,7 +142,7 @@ private struct ContentView: View {
 
                 GroupBox("Voice Settings") {
                     VStack(alignment: .leading, spacing: 10) {
-                        LabeledContent("Speed (0.5–2.0)") {
+                        LabeledContent("Speed (0.7–1.2)") {
                             TextField("e.g. 1.0", text: $speedText)
                                 .textFieldStyle(.roundedBorder)
                         }
@@ -324,15 +324,15 @@ private struct ContentView: View {
             text: text,
             modelId: modelId,
             outputFormat: normalizedOutput,
-            speed: parseDouble(speedText),
-            stability: parseDouble(stabilityText),
-            similarity: parseDouble(similarityText),
-            style: parseDouble(styleText),
+            speed: TalkTTSValidation.resolveSpeed(speed: parseDouble(speedText), rateWPM: nil),
+            stability: TalkTTSValidation.validatedStability(parseDouble(stabilityText), modelId: modelId),
+            similarity: TalkTTSValidation.validatedUnit(parseDouble(similarityText)),
+            style: TalkTTSValidation.validatedUnit(parseDouble(styleText)),
             speakerBoost: speakerBoost,
             seed: parseUInt32(seedText),
             normalize: normalizeOption.requestValue,
             language: ElevenLabsTTSClient.validatedLanguage(languageText),
-            latencyTier: parseInt(latencyTierText)
+            latencyTier: TalkTTSValidation.validatedLatencyTier(parseInt(latencyTierText))
         )
 
         let client = ElevenLabsTTSClient(apiKey: apiKey)
@@ -390,15 +390,15 @@ private struct ContentView: View {
             text: text,
             modelId: modelId,
             outputFormat: normalizedOutput,
-            speed: parseDouble(speedText),
-            stability: parseDouble(stabilityText),
-            similarity: parseDouble(similarityText),
-            style: parseDouble(styleText),
+            speed: TalkTTSValidation.resolveSpeed(speed: parseDouble(speedText), rateWPM: nil),
+            stability: TalkTTSValidation.validatedStability(parseDouble(stabilityText), modelId: modelId),
+            similarity: TalkTTSValidation.validatedUnit(parseDouble(similarityText)),
+            style: TalkTTSValidation.validatedUnit(parseDouble(styleText)),
             speakerBoost: speakerBoost,
             seed: parseUInt32(seedText),
             normalize: normalizeOption.requestValue,
             language: ElevenLabsTTSClient.validatedLanguage(languageText),
-            latencyTier: parseInt(latencyTierText)
+            latencyTier: TalkTTSValidation.validatedLatencyTier(parseInt(latencyTierText))
         )
 
         do {

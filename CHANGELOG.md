@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix non-streaming output-format selection, provider speed validation, retry cancellation, and replacement of active playback sessions.
+
 ## 0.1.1 — 2026-04-28
 
 - Refresh package metadata for the patch release after dependency verification.

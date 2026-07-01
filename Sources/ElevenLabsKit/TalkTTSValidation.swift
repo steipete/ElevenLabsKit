@@ -6,11 +6,11 @@ public enum TalkTTSValidation: Sendable {
     public static func resolveSpeed(speed: Double?, rateWPM: Int?) -> Double? {
         if let rateWPM, rateWPM > 0 {
             let resolved = Double(rateWPM) / 175.0
-            if resolved <= 0.5 || resolved >= 2.0 { return nil }
+            if resolved < 0.7 || resolved > 1.2 { return nil }
             return resolved
         }
         if let speed {
-            if speed <= 0.5 || speed >= 2.0 { return nil }
+            if speed < 0.7 || speed > 1.2 { return nil }
             return speed
         }
         return nil

@@ -19,6 +19,8 @@ public final class PCMStreamingAudioPlayer {
     private var pendingBuffers: Int = 0
     private var inputFinished = false
     private var continuation: CheckedContinuation<StreamingPlaybackResult, Never>?
+    private var streamTask: Task<Void, Never>?
+    private var playbackGeneration = 0
 
     /// Creates a default PCM player.
     public init() {
@@ -48,7 +50,8 @@ public final class PCMStreamingAudioPlayer {
 
     /// Starts playing PCM data at the provided sample rate.
     public func play(stream: AsyncThrowingStream<Data, Error>, sampleRate: Double) async -> StreamingPlaybackResult {
-        stopInternal()
+        interruptCurrentPlayback()
+        let generation = playbackGeneration
 
         let format = AVAudioFormat(
             commonFormat: .pcmFormatInt16,
@@ -67,14 +70,17 @@ public final class PCMStreamingAudioPlayer {
             self.pendingBuffers = 0
             self.inputFinished = false
 
-            Task { @MainActor [weak self] in
+            self.streamTask = Task { @MainActor [weak self] in
                 guard let self else { return }
                 do {
                     for try await chunk in stream {
-                        await enqueuePCM(chunk, format: format)
+                        guard playbackGeneration == generation else { return }
+                        await enqueuePCM(chunk, format: format, generation: generation)
                     }
+                    guard playbackGeneration == generation else { return }
                     finishInput()
                 } catch {
+                    guard playbackGeneration == generation else { return }
                     fail(error)
                 }
             }
@@ -100,7 +106,7 @@ public final class PCMStreamingAudioPlayer {
         player.connect(to: engine, format: format)
     }
 
-    private func enqueuePCM(_ data: Data, format: AVAudioFormat) async {
+    private func enqueuePCM(_ data: Data, format: AVAudioFormat, generation: Int) async {
         guard !data.isEmpty else { return }
         let frameCount = data.count / MemoryLayout<Int16>.size
         guard frameCount > 0 else { return }
@@ -121,6 +127,7 @@ public final class PCMStreamingAudioPlayer {
         Task { @MainActor [weak self] in
             guard let self else { return }
             await player.scheduleBuffer(buffer)
+            guard playbackGeneration == generation else { return }
             pendingBuffers = max(0, pendingBuffers - 1)
             if inputFinished, pendingBuffers == 0 {
                 finish(StreamingPlaybackResult(finished: true, interruptedAt: nil))
@@ -147,19 +154,33 @@ public final class PCMStreamingAudioPlayer {
 
     private func fail(_ error: Error) {
         logger.error("pcm stream failed: \(error.localizedDescription, privacy: .public)")
+        stopInternal()
         finish(StreamingPlaybackResult(finished: false, interruptedAt: nil))
     }
 
     private func stopInternal() {
+        playbackGeneration &+= 1
+        streamTask?.cancel()
+        streamTask = nil
         player.stop()
         stopEngine(engine)
         pendingBuffers = 0
         inputFinished = false
     }
 
+    private func interruptCurrentPlayback() {
+        let hadContinuation = continuation != nil
+        let interruptedAt = hadContinuation ? currentTimeSeconds() : nil
+        stopInternal()
+        if hadContinuation {
+            finish(StreamingPlaybackResult(finished: false, interruptedAt: interruptedAt))
+        }
+    }
+
     private func finish(_ result: StreamingPlaybackResult) {
         let continuation = continuation
         self.continuation = nil
+        streamTask = nil
         continuation?.resume(returning: result)
     }
 
