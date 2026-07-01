@@ -9,13 +9,13 @@ jobs:
   test:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Select Xcode
         run: |
           set -euo pipefail
           DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
-          if ls /Applications/Xcode_*.app >/dev/null 2>&1; then
-            LATEST_XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          LATEST_XCODE="$(find /Applications -maxdepth 1 -type d -name 'Xcode_*.app' -print | sort -V | tail -1)"
+          if [[ -n "$LATEST_XCODE" ]]; then
             DEVELOPER_DIR="$LATEST_XCODE/Contents/Developer"
           fi
           echo "Using DEVELOPER_DIR=$DEVELOPER_DIR"
