@@ -21,7 +21,7 @@ public struct ElevenLabsTTSRequest: Sendable {
     public var modelId: String?
     /// Output format (e.g. `mp3_44100_128`, `pcm_44100`).
     public var outputFormat: String?
-    /// Speed multiplier (0.5–2.0).
+    /// Speed multiplier (0.7–1.2).
     public var speed: Double?
     /// Stability control (0–1). v3 supports 0, 0.5, 1.
     public var stability: Double?
@@ -99,7 +99,12 @@ public struct ElevenLabsTTSClient: Sendable {
         self.baseUrl = baseUrl
         self.urlSession = urlSession
         self.sleep = sleep ?? { seconds in
-            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard seconds.isFinite, seconds > 0 else { return }
+            let maxWholeSeconds = TimeInterval(UInt64.max / 1_000_000_000)
+            let nanoseconds = seconds >= maxWholeSeconds
+                ? UInt64.max
+                : UInt64(seconds * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
         }
     }
 
@@ -109,17 +114,26 @@ public struct ElevenLabsTTSClient: Sendable {
         request: ElevenLabsTTSRequest,
         hardTimeoutSeconds: TimeInterval
     ) async throws -> Data {
-        try await withThrowingTaskGroup(of: Data.self) { group in
+        guard hardTimeoutSeconds.isFinite, hardTimeoutSeconds > 0 else {
+            throw NSError(domain: "ElevenLabsTTS", code: 408, userInfo: [
+                NSLocalizedDescriptionKey: "ElevenLabs TTS hard timeout must be greater than zero"
+            ])
+        }
+
+        return try await withThrowingTaskGroup(of: Data.self) { group in
             group.addTask {
                 try await synthesize(voiceId: voiceId, request: request)
             }
             group.addTask {
                 await sleep(hardTimeoutSeconds)
+                try Task.checkCancellation()
                 throw NSError(domain: "ElevenLabsTTS", code: 408, userInfo: [
                     NSLocalizedDescriptionKey: "ElevenLabs TTS timed out after \(hardTimeoutSeconds)s"
                 ])
             }
-            let data = try await group.next()!
+            guard let data = try await group.next() else {
+                throw CancellationError()
+            }
             group.cancelAll()
             return data
         }
@@ -127,10 +141,13 @@ public struct ElevenLabsTTSClient: Sendable {
 
     /// Synthesizes speech and returns the full audio payload.
     public func synthesize(voiceId: String, request: ElevenLabsTTSRequest) async throws -> Data {
-        var url = baseUrl
-        url.appendPathComponent("v1")
-        url.appendPathComponent("text-to-speech")
-        url.appendPathComponent(voiceId)
+        let url = Self.synthesisURL(
+            baseUrl: baseUrl,
+            voiceId: voiceId,
+            outputFormat: request.outputFormat,
+            streaming: false,
+            latencyTier: nil
+        )
 
         let body = try JSONSerialization.data(withJSONObject: Self.buildPayload(request), options: [])
 
@@ -158,6 +175,7 @@ public struct ElevenLabsTTSClient: Sendable {
                             let baseDelay = [0.25, 0.75, 1.5][attempt]
                             let delaySeconds = max(baseDelay, retryAfter ?? 0)
                             await sleep(delaySeconds)
+                            try Task.checkCancellation()
                             continue
                         }
                         throw lastError!
@@ -179,9 +197,13 @@ public struct ElevenLabsTTSClient: Sendable {
                 }
                 return data
             } catch {
+                if Task.isCancelled || Self.isCancellation(error) {
+                    throw error
+                }
                 lastError = error
-                if attempt < 2 {
+                if attempt < 2, Self.isRetryableTransportError(error) {
                     await sleep([0.25, 0.75, 1.5][attempt])
+                    try Task.checkCancellation()
                     continue
                 }
                 throw error
@@ -201,10 +223,11 @@ public struct ElevenLabsTTSClient: Sendable {
             let chunkSize = 2048
             let task = Task {
                 do {
-                    let url = Self.streamingURL(
+                    let url = Self.synthesisURL(
                         baseUrl: baseUrl,
                         voiceId: voiceId,
                         outputFormat: request.outputFormat,
+                        streaming: true,
                         latencyTier: request.latencyTier
                     )
                     let body = try JSONSerialization.data(withJSONObject: Self.buildPayload(request), options: [])
@@ -309,13 +332,10 @@ public struct ElevenLabsTTSClient: Sendable {
         return normalized
     }
 
-    private static func buildPayload(_ request: ElevenLabsTTSRequest) -> [String: Any] {
+    static func buildPayload(_ request: ElevenLabsTTSRequest) -> [String: Any] {
         var payload: [String: Any] = ["text": request.text]
         if let modelId = request.modelId?.trimmingCharacters(in: .whitespacesAndNewlines), !modelId.isEmpty {
             payload["model_id"] = modelId
-        }
-        if let outputFormat = request.outputFormat?.trimmingCharacters(in: .whitespacesAndNewlines), !outputFormat.isEmpty {
-            payload["output_format"] = outputFormat
         }
         if let seed = request.seed {
             payload["seed"] = seed
@@ -344,17 +364,20 @@ public struct ElevenLabsTTSClient: Sendable {
         return raw.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ")
     }
 
-    private static func streamingURL(
+    static func synthesisURL(
         baseUrl: URL,
         voiceId: String,
         outputFormat: String?,
+        streaming: Bool,
         latencyTier: Int?
     ) -> URL {
         var url = baseUrl
         url.appendPathComponent("v1")
         url.appendPathComponent("text-to-speech")
         url.appendPathComponent(voiceId)
-        url.appendPathComponent("stream")
+        if streaming {
+            url.appendPathComponent("stream")
+        }
 
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return url
@@ -370,6 +393,17 @@ public struct ElevenLabsTTSClient: Sendable {
         }
         components.queryItems = items.isEmpty ? nil : items
         return components.url ?? url
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
+    }
+
+    private static func isRetryableTransportError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code != NSURLErrorCancelled
     }
 
     private static func acceptHeader(for outputFormat: String?) -> String? {
