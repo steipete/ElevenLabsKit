@@ -42,6 +42,25 @@ private final class FakePCMPlayerNode: PCMPlayerNodeing {
     }
 }
 
+@MainActor
+private final class PCMBufferSchedulingGate {
+    private(set) var invocationCount = 0
+    private var firstContinuation: CheckedContinuation<Void, Never>?
+
+    func waitIfFirst() async {
+        invocationCount += 1
+        guard invocationCount == 1 else { return }
+        await withCheckedContinuation { continuation in
+            firstContinuation = continuation
+        }
+    }
+
+    func resumeFirst() {
+        firstContinuation?.resume()
+        firstContinuation = nil
+    }
+}
+
 final class PCMStreamingAudioPlayerTests {
     @MainActor @Test func `stop during PCM stream returns interrupted result`() async {
         let fakePlayer = FakePCMPlayerNode()
@@ -151,5 +170,46 @@ final class PCMStreamingAudioPlayerTests {
         let secondResult = await secondTask.value
         #expect(firstResult.finished == false)
         #expect(secondResult.finished)
+    }
+
+    @MainActor @Test func `stale buffer is not scheduled into replacement playback`() async {
+        let fakePlayer = FakePCMPlayerNode()
+        let schedulingGate = PCMBufferSchedulingGate()
+        let player = PCMStreamingAudioPlayer(
+            playerFactory: { fakePlayer },
+            engineFactory: { AVAudioEngine() },
+            startEngine: { _ in },
+            stopEngine: { _ in },
+            beforeSchedulingBuffer: { await schedulingGate.waitIfFirst() }
+        )
+
+        let firstStream = AsyncThrowingStream<Data, Error> { continuation in
+            continuation.yield(Data(repeating: 1, count: 4))
+        }
+        let firstTask = Task { @MainActor in
+            await player.play(stream: firstStream, sampleRate: 44100)
+        }
+        for _ in 0..<10 where schedulingGate.invocationCount < 1 {
+            await Task.yield()
+        }
+
+        let secondStream = AsyncThrowingStream<Data, Error> { continuation in
+            continuation.yield(Data(repeating: 2, count: 4))
+            continuation.finish()
+        }
+        let secondTask = Task { @MainActor in
+            await player.play(stream: secondStream, sampleRate: 44100)
+        }
+        for _ in 0..<10 where fakePlayer.scheduledBuffers.isEmpty {
+            await Task.yield()
+        }
+
+        schedulingGate.resumeFirst()
+        let firstResult = await firstTask.value
+        let secondResult = await secondTask.value
+        await Task.yield()
+        #expect(firstResult.finished == false)
+        #expect(secondResult.finished)
+        #expect(fakePlayer.scheduledBuffers.count == 1)
     }
 }

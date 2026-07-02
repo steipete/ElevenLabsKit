@@ -13,6 +13,7 @@ public final class PCMStreamingAudioPlayer {
     private let engineFactory: () -> AVAudioEngine
     private let startEngine: (AVAudioEngine) throws -> Void
     private let stopEngine: (AVAudioEngine) -> Void
+    private let beforeSchedulingBuffer: () async -> Void
     private var engine: AVAudioEngine
     private var player: PCMPlayerNodeing
     private var format: AVAudioFormat?
@@ -28,6 +29,7 @@ public final class PCMStreamingAudioPlayer {
         self.engineFactory = { AVAudioEngine() }
         self.startEngine = { engine in try engine.start() }
         self.stopEngine = { engine in engine.stop() }
+        self.beforeSchedulingBuffer = {}
         self.engine = engineFactory()
         self.player = playerFactory()
         player.attach(to: engine)
@@ -37,12 +39,14 @@ public final class PCMStreamingAudioPlayer {
         playerFactory: @escaping () -> PCMPlayerNodeing,
         engineFactory: @escaping () -> AVAudioEngine,
         startEngine: @escaping (AVAudioEngine) throws -> Void,
-        stopEngine: @escaping (AVAudioEngine) -> Void
+        stopEngine: @escaping (AVAudioEngine) -> Void,
+        beforeSchedulingBuffer: @escaping () async -> Void = {}
     ) {
         self.playerFactory = playerFactory
         self.engineFactory = engineFactory
         self.startEngine = startEngine
         self.stopEngine = stopEngine
+        self.beforeSchedulingBuffer = beforeSchedulingBuffer
         self.engine = engineFactory()
         self.player = playerFactory()
         player.attach(to: engine)
@@ -124,9 +128,12 @@ public final class PCMStreamingAudioPlayer {
         }
 
         pendingBuffers += 1
+        let scheduledPlayer = player
         Task { @MainActor [weak self] in
             guard let self else { return }
-            await player.scheduleBuffer(buffer)
+            await beforeSchedulingBuffer()
+            guard playbackGeneration == generation else { return }
+            await scheduledPlayer.scheduleBuffer(buffer)
             guard playbackGeneration == generation else { return }
             pendingBuffers = max(0, pendingBuffers - 1)
             if inputFinished, pendingBuffers == 0 {
