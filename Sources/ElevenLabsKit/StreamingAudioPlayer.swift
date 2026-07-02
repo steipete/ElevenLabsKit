@@ -57,6 +57,8 @@ public final class StreamingAudioPlayer: NSObject {
     /// Stops playback immediately and returns the interrupted timestamp.
     public func stop() -> Double? {
         guard let playback else { return nil }
+        streamTask?.cancel()
+        streamTask = nil
         let interruptedAt = playback.stop(immediate: true)
         finish(playback: playback, result: StreamingPlaybackResult(finished: false, interruptedAt: interruptedAt))
         return interruptedAt
