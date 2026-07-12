@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Fix non-streaming output-format selection, provider speed validation, retry cancellation, and replacement of active playback sessions.
+- Refresh the package, examples, formatting, and CI baseline for Swift 6.3.
 
 ## 0.1.1 — 2026-04-28
 

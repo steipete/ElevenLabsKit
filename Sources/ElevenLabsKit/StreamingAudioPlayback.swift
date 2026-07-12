@@ -284,7 +284,9 @@ final class StreamingAudioPlayback: @unchecked Sendable {
                 next = availableBuffers.popLast()
                 bufferLock.unlock()
             }
-            if let next { currentBuffer = next }
+            if let next {
+                currentBuffer = next
+            }
         }
     }
 
@@ -363,8 +365,12 @@ final class StreamingAudioPlayback: @unchecked Sendable {
         guard let audioQueue, sampleRate > 0 else { return nil }
         var timeStamp = AudioTimeStamp()
         let status = audio.queueGetCurrentTime(audioQueue, nil, &timeStamp, nil)
-        if status != noErr { return nil }
-        if timeStamp.mSampleTime.isNaN { return nil }
+        if status != noErr {
+            return nil
+        }
+        if timeStamp.mSampleTime.isNaN {
+            return nil
+        }
         return timeStamp.mSampleTime / sampleRate
     }
 }
@@ -436,7 +442,9 @@ func isRunningCallbackProc(
     var running: UInt32 = 0
     var size = UInt32(MemoryLayout<UInt32>.size)
     let status = playback.audio.queueGetProperty(inAQ, kAudioQueueProperty_IsRunning, &running, &size)
-    if status != noErr { return }
+    if status != noErr {
+        return
+    }
 
     if running == 0, playback.inputFinished {
         playback.finish(StreamingPlaybackResult(finished: true, interruptedAt: nil))

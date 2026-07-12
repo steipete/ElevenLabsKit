@@ -64,7 +64,9 @@ enum ExampleSecrets {
                 guard idx + 1 < tokens.count else { break }
                 let key = tokens[idx]
                 let value = tokens[idx + 1]
-                if key == "password" { password = value }
+                if key == "password" {
+                    password = value
+                }
                 idx += 2
             }
 
