@@ -10,14 +10,22 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
-      - name: Select Xcode
+      - name: Select Swift 6.3 Xcode
         run: |
           set -euo pipefail
-          DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
-          LATEST_XCODE="$(find /Applications -maxdepth 1 -type d -name 'Xcode_*.app' -print | sort -V | tail -1)"
-          if [[ -n "$LATEST_XCODE" ]]; then
-            DEVELOPER_DIR="$LATEST_XCODE/Contents/Developer"
+          LATEST_XCODE="$(
+            while IFS= read -r candidate; do
+              if DEVELOPER_DIR="$candidate/Contents/Developer" xcrun swift --version 2>&1 | grep -qE "Swift version 6\\.3"; then
+                echo "$candidate"
+                break
+              fi
+            done < <(find /Applications -maxdepth 1 -type d -name 'Xcode_*.app' -print | sort -Vr)
+          )"
+          if [[ -z "$LATEST_XCODE" ]]; then
+            echo "No installed Xcode provides Swift 6.3" >&2
+            exit 1
           fi
+          DEVELOPER_DIR="$LATEST_XCODE/Contents/Developer"
           echo "Using DEVELOPER_DIR=$DEVELOPER_DIR"
           sudo xcode-select -s "$DEVELOPER_DIR"
       - name: Toolchain info
