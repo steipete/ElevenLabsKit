@@ -10,7 +10,7 @@ Swift helpers for ElevenLabs TTS on Apple platforms (iOS/macOS).
 - Validation helpers for model-specific settings
 
 ## Requirements
-- Swift 6.2 (SwiftPM `swift-tools-version: 6.2`)
+- Swift 6.3 (SwiftPM `swift-tools-version: 6.3`)
 - iOS 17+
 - macOS 15+
 

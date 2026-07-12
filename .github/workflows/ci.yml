@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
       - name: Select Xcode
@@ -24,8 +24,8 @@ jobs:
         run: |
           xcodebuild -version
           xcrun swift --version
-      - name: Assert Swift 6.2
-        run: xcrun swift --version 2>&1 | grep -E "Swift version 6\\.2"
+      - name: Assert Swift 6.3
+        run: xcrun swift --version 2>&1 | grep -E "Swift version 6\\.3"
       - name: Install linters
         run: brew install swiftlint swiftformat
       - name: SwiftFormat

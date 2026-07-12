@@ -250,11 +250,17 @@ private func resolveVoiceId(args: CLIArguments, client: ElevenLabsTTSClient) asy
 }
 
 private func resolveOutputFormat(from args: CLIArguments) -> String? {
-    if let outputFormat = args.outputFormat { return outputFormat }
+    if let outputFormat = args.outputFormat {
+        return outputFormat
+    }
     guard let outputPath = args.outputPath else { return nil }
     let lower = outputPath.lowercased()
-    if lower.hasSuffix(".wav") { return "pcm_44100" }
-    if lower.hasSuffix(".mp3") { return "mp3_44100_128" }
+    if lower.hasSuffix(".wav") {
+        return "pcm_44100"
+    }
+    if lower.hasSuffix(".mp3") {
+        return "mp3_44100_128"
+    }
     return nil
 }
 
@@ -407,14 +413,20 @@ private func drain(
 ) async throws {
     var didSetTTFB = false
     for try await chunk in stream {
-        if let sink { await sink.write(chunk) }
-        if let metrics { await metrics.addBytes(chunk.count) }
+        if let sink {
+            await sink.write(chunk)
+        }
+        if let metrics {
+            await metrics.addBytes(chunk.count)
+        }
         if didSetTTFB == false, let metrics {
             didSetTTFB = true
             await metrics.setTTFB(seconds(from: clock, since: start))
         }
     }
-    if let sink { await sink.close() }
+    if let sink {
+        await sink.close()
+    }
     if let metrics {
         await metrics.setDownload(seconds(from: clock, since: start))
     }
@@ -488,8 +500,12 @@ private func makeReplayStream(
             }
 
             do {
-                if let sink { await sink.write(firstChunk) }
-                if let onChunk { await onChunk(firstChunk.count) }
+                if let sink {
+                    await sink.write(firstChunk)
+                }
+                if let onChunk {
+                    await onChunk(firstChunk.count)
+                }
 
                 if stripWavHeader {
                     headerBuffer.append(firstChunk)
@@ -499,8 +515,12 @@ private func makeReplayStream(
                 }
 
                 while let chunk = try await iterator.next() {
-                    if let sink { await sink.write(chunk) }
-                    if let onChunk { await onChunk(chunk.count) }
+                    if let sink {
+                        await sink.write(chunk)
+                    }
+                    if let onChunk {
+                        await onChunk(chunk.count)
+                    }
 
                     if stripWavHeader, headerStripped == false {
                         headerBuffer.append(chunk)
@@ -513,12 +533,20 @@ private func makeReplayStream(
                 if headerStripped == false, headerBuffer.isEmpty == false {
                     continuation.yield(headerBuffer)
                 }
-                if let onStreamFinished { await onStreamFinished() }
-                if let sink { await sink.close() }
+                if let onStreamFinished {
+                    await onStreamFinished()
+                }
+                if let sink {
+                    await sink.close()
+                }
                 continuation.finish()
             } catch {
-                if let onStreamFinished { await onStreamFinished() }
-                if let sink { await sink.close() }
+                if let onStreamFinished {
+                    await onStreamFinished()
+                }
+                if let sink {
+                    await sink.close()
+                }
                 continuation.finish(throwing: error)
             }
         }

@@ -1,4 +1,4 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.3
 
 import PackageDescription
 
@@ -17,8 +17,5 @@ let package = Package(
             dependencies: []),
         .testTarget(
             name: "ElevenLabsKitTests",
-            dependencies: ["ElevenLabsKit"],
-            swiftSettings: [
-                .enableExperimentalFeature("SwiftTesting"),
-            ]),
+            dependencies: ["ElevenLabsKit"]),
     ])

@@ -348,11 +348,21 @@ public struct ElevenLabsTTSClient: Sendable {
         }
 
         var voiceSettings: [String: Any] = [:]
-        if let speed = request.speed { voiceSettings["speed"] = speed }
-        if let stability = request.stability { voiceSettings["stability"] = stability }
-        if let similarity = request.similarity { voiceSettings["similarity_boost"] = similarity }
-        if let style = request.style { voiceSettings["style"] = style }
-        if let speakerBoost = request.speakerBoost { voiceSettings["use_speaker_boost"] = speakerBoost }
+        if let speed = request.speed {
+            voiceSettings["speed"] = speed
+        }
+        if let stability = request.stability {
+            voiceSettings["stability"] = stability
+        }
+        if let similarity = request.similarity {
+            voiceSettings["similarity_boost"] = similarity
+        }
+        if let style = request.style {
+            voiceSettings["style"] = style
+        }
+        if let speakerBoost = request.speakerBoost {
+            voiceSettings["use_speaker_boost"] = speakerBoost
+        }
         if !voiceSettings.isEmpty {
             payload["voice_settings"] = voiceSettings
         }
@@ -396,7 +406,9 @@ public struct ElevenLabsTTSClient: Sendable {
     }
 
     private static func isCancellation(_ error: Error) -> Bool {
-        if error is CancellationError { return true }
+        if error is CancellationError {
+            return true
+        }
         let nsError = error as NSError
         return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
     }
@@ -408,8 +420,12 @@ public struct ElevenLabsTTSClient: Sendable {
 
     private static func acceptHeader(for outputFormat: String?) -> String? {
         let normalized = (outputFormat ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if normalized.hasPrefix("pcm_") { return "audio/pcm" }
-        if normalized.hasPrefix("mp3_") { return "audio/mpeg" }
+        if normalized.hasPrefix("pcm_") {
+            return "audio/pcm"
+        }
+        if normalized.hasPrefix("mp3_") {
+            return "audio/mpeg"
+        }
         return nil
     }
 
@@ -431,7 +447,9 @@ public struct ElevenLabsTTSClient: Sendable {
     }
 
     private static func isAudioContentType(_ contentType: String, outputFormat: String?) -> Bool {
-        if contentType.contains("audio") { return true }
+        if contentType.contains("audio") {
+            return true
+        }
         let normalized = (outputFormat ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if normalized.hasPrefix("pcm_"), contentType.contains("octet-stream") {
             return true
@@ -443,7 +461,9 @@ public struct ElevenLabsTTSClient: Sendable {
         var data = Data()
         for try await byte in bytes {
             data.append(byte)
-            if data.count >= 4096 { break }
+            if data.count >= 4096 {
+                break
+            }
         }
         return truncatedErrorBody(data)
     }
