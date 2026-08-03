@@ -8,7 +8,7 @@ let package = Package(
         .macOS(.v15)
     ],
     dependencies: [
-        .package(path: "../..")
+        .package(name: "ElevenLabsKit", path: "../..")
     ],
     targets: [
         .executableTarget(
