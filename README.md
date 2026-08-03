@@ -1,70 +1,107 @@
-# 📣 ElevenLabsKit — ElevenLabs voices on tap—SwiftPM-friendly, streaming-native.
+# ElevenLabsKit 📣 — Give your Swift app a voice.
 
-Swift helpers for ElevenLabs TTS on Apple platforms (iOS/macOS).
+[![CI](https://img.shields.io/github/actions/workflow/status/steipete/ElevenLabsKit/ci.yml?branch=main&style=flat-square&label=ci)](https://github.com/steipete/ElevenLabsKit/actions/workflows/ci.yml)
+[![GitHub release](https://img.shields.io/github/v/release/steipete/ElevenLabsKit?style=flat-square)](https://github.com/steipete/ElevenLabsKit/releases/latest)
+[![Swift 6.3](https://img.shields.io/badge/Swift-6.3-f05138?style=flat-square)](https://www.swift.org)
+[![Platforms](https://img.shields.io/badge/platforms-iOS%2017%2B%20%7C%20macOS%2015%2B-blue?style=flat-square)](Package.swift)
+[![License](https://img.shields.io/github/license/steipete/ElevenLabsKit?style=flat-square)](LICENSE)
 
-## What’s Included
-- ElevenLabs TTS client + voice listing
-- Streaming HTTP support
-- MP3 streaming playback (AudioQueue)
-- PCM streaming playback (AVAudioEngine + AVAudioPlayerNode)
-- Validation helpers for model-specific settings
+ElevenLabsKit is a Swift package for text-to-speech requests and streaming audio playback with ElevenLabs. It supports iOS and macOS apps that need async voice listing, synthesis, or low-level MP3 and PCM playback.
 
-## Requirements
-- Swift 6.3 (SwiftPM `swift-tools-version: 6.3`)
-- iOS 17+
-- macOS 15+
+## Install
 
-## Install (Swift Package Manager)
+Add `https://github.com/steipete/ElevenLabsKit.git` in Xcode under **File → Add Package Dependencies**, or add the package and product to your `Package.swift`:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/steipete/ElevenLabsKit.git", from: "0.1.1"),
+],
+targets: [
+    .target(name: "YourApp", dependencies: ["ElevenLabsKit"]),
+]
 ```
-https://github.com/steipete/ElevenLabsKit.git
-```
 
-## Quick Start
+The current source tree requires Swift 6.3, iOS 17 or later, or macOS 15 or later.
+
+## Quick start
+
+Create a client, stream PCM audio, and play chunks as they arrive:
+
 ```swift
 import ElevenLabsKit
 
 let client = ElevenLabsTTSClient(apiKey: "<api-key>")
 let request = ElevenLabsTTSRequest(
-    text: "Hello",
+    text: "Hello from ElevenLabsKit",
     modelId: "eleven_v3",
     outputFormat: "pcm_44100")
-
 let stream = client.streamSynthesize(voiceId: "<voice-id>", request: request)
-let sampleRate = TalkTTSValidation.pcmSampleRate(from: request.outputFormat) ?? 44_100
-let result = await PCMStreamingAudioPlayer.shared.play(stream: stream, sampleRate: sampleRate)
+let result = await PCMStreamingAudioPlayer.shared.play(stream: stream, sampleRate: 44_100)
 ```
 
-## Non-Streaming (Fetch)
+The request needs an ElevenLabs API key and a voice ID from your account. `result.finished` reports whether playback completed; starting another playback session interrupts the active one.
+
+## Synthesis
+
+Use `synthesize` when you need the complete audio payload instead of a stream:
+
 ```swift
 let data = try await client.synthesize(voiceId: "<voice-id>", request: request)
 ```
 
-## Output Formats
-- `pcm_44100`: lowest latency on Apple platforms.
-- `mp3_44100_128`: MP3 streaming when needed.
+List the voices available to the account with `try await client.listVoices()`. `synthesize` retries rate-limit, server, and retryable transport failures up to three attempts; `synthesizeWithHardTimeout` adds an overall cancellation deadline.
 
-## Playback Choices
-- MP3: `StreamingAudioPlayer.shared.play(stream:)`
-- PCM: `PCMStreamingAudioPlayer.shared.play(stream:sampleRate:)`
+## Playback
 
-## Validation Notes
-- `speed` is restricted to the provider-supported `0.7...1.2` range.
-- `stability` for `eleven_v3` is restricted to `0.0`, `0.5`, or `1.0`.
-- `latencyTier` is validated to `0...4`; ElevenLabs now marks this optimization as deprecated.
+The package provides two shared players:
 
-## Example App (SwiftUI)
-- Run: `cd Examples/ElevenLabsKitExample && swift run`
-- Or open `Examples/ElevenLabsKitExample/Package.swift` in Xcode and run `ElevenLabsKitExample`.
-- Toggle `Streaming` vs `Fetch` to compare streaming vs non-streaming requests.
+| Format | Player | Backend |
+| --- | --- | --- |
+| MP3 | `StreamingAudioPlayer.shared` | Audio Queue Services |
+| PCM | `PCMStreamingAudioPlayer.shared` | `AVAudioEngine` and `AVAudioPlayerNode` |
 
-## Example CLI
-- Run: `cd Examples/ElevenLabsKitCLI && swift run ElevenLabsKitCLI --help`
-- Requires `ELEVENLABS_API_KEY` (or pass `--api-key`).
+Choose an output format that matches the player. For PCM formats, `TalkTTSValidation.pcmSampleRate(from:)` extracts the rate from values such as `pcm_44100`:
 
-## Dev
-- Tests: `swift test`
-- Format: `swiftformat Sources Tests Examples`
-- Lint: `swiftlint lint --strict --config .swiftlint.yml`
+```swift
+let sampleRate = TalkTTSValidation.pcmSampleRate(from: request.outputFormat) ?? 44_100
+let result = await PCMStreamingAudioPlayer.shared.play(stream: stream, sampleRate: sampleRate)
+```
+
+Call `stop()` on either player to interrupt playback and receive its last timestamp when available.
+
+## Request validation
+
+`ElevenLabsTTSRequest` supports model, output format, speed, stability, similarity, style, speaker boost, seed, normalization, language, and streaming latency settings. `TalkTTSValidation` and the static helpers on `ElevenLabsTTSClient` validate common inputs before a request is sent:
+
+- Speed accepts `0.7...1.2`, including conversion from words per minute.
+- Stability accepts `0...1`; `eleven_v3` accepts `0`, `0.5`, or `1`.
+- Similarity and style accept `0...1`.
+- Streaming latency tier accepts `0...4`.
+- Language accepts two-letter codes, and normalization accepts `auto`, `on`, or `off`.
+
+## Examples
+
+[`ElevenLabsKitExample`](Examples/ElevenLabsKitExample/Package.swift) is a macOS SwiftUI app for comparing streaming and fetched playback, selecting voices, and adjusting request parameters. Open its `Package.swift` in Xcode and run the `ElevenLabsKitExample` scheme.
+
+[`ElevenLabsKitCLI`](Examples/ElevenLabsKitCLI/Package.swift) exercises the same APIs from a terminal:
+
+```sh
+cd Examples/ElevenLabsKitCLI
+swift run ElevenLabsKitCLI --help
+```
+
+Speech and voice-list commands require `ELEVENLABS_API_KEY` or `--api-key`.
+
+## Development
+
+```sh
+swift test
+swiftformat Sources Tests Examples --lint
+swiftlint lint --strict --config .swiftlint.yml
+(cd Examples/ElevenLabsKitExample && swift build)
+(cd Examples/ElevenLabsKitCLI && swift build)
+```
 
 ## License
-MIT
+
+ElevenLabsKit is available under the [MIT License](LICENSE).
