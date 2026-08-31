@@ -18,10 +18,11 @@ if [[ ! -f "$profdata" ]]; then
 fi
 
 bin_path="$(swift build --show-bin-path)"
-bundle_dir="$(find "$bin_path" -maxdepth 1 -type d -name '*PackageTests.xctest' | head -n 1)"
+# Swift Build omits the Package suffix used by SwiftPM's native build system.
+bundle_dir="$(find "$bin_path" -maxdepth 1 -type d -name '*Tests.xctest' | head -n 1)"
 
 if [[ -z "${bundle_dir}" ]]; then
-  echo "error: could not find *PackageTests.xctest in $bin_path"
+  echo "error: could not find *Tests.xctest in $bin_path"
   exit 1
 fi
 
