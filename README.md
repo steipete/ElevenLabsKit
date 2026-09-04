@@ -68,6 +68,7 @@ let result = await PCMStreamingAudioPlayer.shared.play(stream: stream, sampleRat
 ```
 
 Call `stop()` on either player to interrupt playback and receive its last timestamp when available.
+For MP3 streams, stopping cancels pending parsing and completes cleanup after any active parser call returns. The playback result is delivered after the native audio queue and parser are disposed.
 
 ## Request validation
 

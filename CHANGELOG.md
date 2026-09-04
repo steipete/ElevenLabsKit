@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix overlapping MP3 stop and stream completion closing the same parser twice; serialize teardown with parsing and keep callback context alive until native resources are disposed.
 - Reject invalid CLI voice limits and streaming latency tiers before requests, preventing negative voice limits from crashing after a successful voice listing.
 
 ## 0.1.2 — 2026-08-02
