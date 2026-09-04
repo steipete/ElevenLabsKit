@@ -140,7 +140,11 @@ private struct CLIArguments {
             case "--format":
                 parsed.outputFormat = try requireValue(&args, flag: arg)
             case "--latency-tier":
-                parsed.latencyTier = try Int(requireValue(&args, flag: arg))
+                let value = try requireValue(&args, flag: arg)
+                guard let tier = Int(value), (0...4).contains(tier) else {
+                    throw CLIError("--latency-tier must be an integer from 0 to 4.")
+                }
+                parsed.latencyTier = tier
             case "--stream":
                 parsed.stream = true
             case "--no-stream":
@@ -156,7 +160,11 @@ private struct CLIArguments {
             case "--search":
                 parsed.search = try requireValue(&args, flag: arg)
             case "--limit":
-                parsed.limit = try Int(requireValue(&args, flag: arg))
+                let value = try requireValue(&args, flag: arg)
+                guard let limit = Int(value), limit >= 0 else {
+                    throw CLIError("--limit must be a non-negative integer.")
+                }
+                parsed.limit = limit
             default:
                 parsed.textParts.append(arg)
             }
@@ -194,7 +202,7 @@ private struct CLIArguments {
 
         Voices:
           --search <text>        Filter voices by name/id
-          --limit <n>            Limit number of voices
+          --limit <n>            Limit number of voices (non-negative integer)
 
         Examples:
           ELEVENLABS_API_KEY=... ElevenLabsKitCLI "Hello"

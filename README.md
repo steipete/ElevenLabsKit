@@ -91,6 +91,7 @@ swift run ElevenLabsKitCLI --help
 ```
 
 Speech and voice-list commands require `ELEVENLABS_API_KEY` or `--api-key`.
+`--limit` accepts non-negative integers (zero lists no voices), and `--latency-tier` accepts integers from `0` through `4`. Invalid numeric options fail before any API request.
 
 ## Development
 
@@ -100,6 +101,7 @@ swiftformat Sources Tests Examples --lint
 swiftlint lint --strict --config .swiftlint.yml
 (cd Examples/ElevenLabsKitExample && swift build)
 (cd Examples/ElevenLabsKitCLI && swift build)
+./scripts/check-cli.sh
 ```
 
 ## License
