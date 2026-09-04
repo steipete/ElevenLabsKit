@@ -10,6 +10,8 @@ final class StreamingAudioPlayback: @unchecked Sendable {
     private let lock = NSLock()
     fileprivate let audio: AudioToolboxClient
     private let scheduleParseWork: (@escaping @Sendable () -> Void) -> Void
+    private let parseQueue: DispatchQueue?
+    private let parseQueueKey = DispatchSpecificKey<Bool>()
     fileprivate let bufferLock = NSLock()
     fileprivate let bufferSemaphore = DispatchSemaphore(value: bufferCount)
 
@@ -28,7 +30,7 @@ final class StreamingAudioPlayback: @unchecked Sendable {
     private var currentBufferSize: Int = 0
     private var currentPacketDescs: [AudioStreamPacketDescription] = []
 
-    fileprivate var inputFinished = false
+    private var inputFinished = false
     private var startRequested = false
 
     private var sampleRate: Double = 0
@@ -41,11 +43,21 @@ final class StreamingAudioPlayback: @unchecked Sendable {
         self.logger = logger
         self.audio = audio
         if let scheduleParseWork {
+            self.parseQueue = nil
             self.scheduleParseWork = scheduleParseWork
         } else {
             let parseQueue = DispatchQueue(label: "talk.stream.parse")
+            self.parseQueue = parseQueue
+            parseQueue.setSpecific(key: parseQueueKey, value: true)
             self.scheduleParseWork = { work in parseQueue.async(execute: work) }
         }
+    }
+
+    private func performParseWork<T>(_ work: () -> T) -> T {
+        guard let parseQueue, DispatchQueue.getSpecific(key: parseQueueKey) != true else {
+            return work()
+        }
+        return parseQueue.sync(execute: work)
     }
 
     func setContinuation(_ continuation: CheckedContinuation<StreamingPlaybackResult, Never>) {
@@ -55,6 +67,10 @@ final class StreamingAudioPlayback: @unchecked Sendable {
     }
 
     func start() {
+        performParseWork { openStream() }
+    }
+
+    private func openStream() {
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
         let status = audio.fileStreamOpen(
             selfPtr,
@@ -72,7 +88,7 @@ final class StreamingAudioPlayback: @unchecked Sendable {
     func append(_ data: Data) {
         guard !data.isEmpty else { return }
         scheduleParseWork { [weak self] in
-            guard let self else { return }
+            guard let self, !isTearingDown() else { return }
             guard let audioFileStream else { return }
             let status = data.withUnsafeBytes { bytes in
                 audio.fileStreamParseBytes(
@@ -91,7 +107,7 @@ final class StreamingAudioPlayback: @unchecked Sendable {
 
     func finishInput() {
         scheduleParseWork { [weak self] in
-            guard let self else { return }
+            guard let self, !isTearingDown() else { return }
             inputFinished = true
             if audioQueue == nil {
                 finish(StreamingPlaybackResult(finished: false, interruptedAt: nil))
@@ -109,31 +125,43 @@ final class StreamingAudioPlayback: @unchecked Sendable {
     }
 
     func stop(immediate: Bool) -> Double? {
-        guard let audioQueue else { return nil }
-        let interruptedAt = currentTimeSeconds()
-        _ = audio.queueStop(audioQueue, immediate)
-        return interruptedAt
+        if immediate {
+            lock.lock()
+            tearingDown = true
+            lock.unlock()
+            // A parser waiting for an audio buffer must exit before a synchronous stop can run.
+            releaseBufferWaiters()
+        }
+        return performParseWork {
+            guard let audioQueue else { return nil }
+            let interruptedAt = currentTimeSeconds()
+            _ = audio.queueStop(audioQueue, immediate)
+            return interruptedAt
+        }
     }
 
     func finish(_ result: StreamingPlaybackResult) {
         let continuation: CheckedContinuation<StreamingPlaybackResult, Never>?
         lock.lock()
-        if finished {
-            continuation = nil
-        } else {
-            finished = true
-            tearingDown = true
-            continuation = self.continuation
-            self.continuation = nil
+        guard !finished else {
+            lock.unlock()
+            return
         }
+        finished = true
+        tearingDown = true
+        continuation = self.continuation
+        self.continuation = nil
         lock.unlock()
 
-        continuation?.resume(returning: result)
-        teardown()
+        releaseBufferWaiters()
+        // Keep callback context alive and close only after the current parser operation returns.
+        scheduleParseWork { [self] in
+            teardown()
+            continuation?.resume(returning: result)
+        }
     }
 
     private func teardown() {
-        releaseBufferWaiters()
         if let audioQueue {
             _ = audio.queueDispose(audioQueue, true)
             self.audioQueue = nil
@@ -157,10 +185,12 @@ final class StreamingAudioPlayback: @unchecked Sendable {
         }
     }
 
-    private func recordBufferWait() {
+    private func recordBufferWait() -> Bool {
         lock.lock()
+        defer { lock.unlock() }
+        guard !tearingDown else { return false }
         bufferWaits += 1
-        lock.unlock()
+        return true
     }
 
     private func drainBufferWaits() -> Int {
@@ -277,7 +307,7 @@ final class StreamingAudioPlayback: @unchecked Sendable {
             bufferLock.unlock()
             if next == nil {
                 guard !isTearingDown() else { return }
-                recordBufferWait()
+                guard recordBufferWait() else { return }
                 bufferSemaphore.wait()
                 guard !isTearingDown() else { return }
                 bufferLock.lock()
@@ -313,7 +343,7 @@ final class StreamingAudioPlayback: @unchecked Sendable {
             bufferLock.unlock()
             if currentBuffer == nil {
                 guard !isTearingDown() else { return }
-                recordBufferWait()
+                guard recordBufferWait() else { return }
                 bufferSemaphore.wait()
                 guard !isTearingDown() else { return }
                 bufferLock.lock()
@@ -347,6 +377,8 @@ final class StreamingAudioPlayback: @unchecked Sendable {
                 enqueueCurrentBuffer()
             }
 
+            // Cancellation can skip the enqueue while leaving the current buffer full.
+            guard !isTearingDown() else { return }
             guard let buffer = currentBuffer else { continue }
             let dest = buffer.pointee.mAudioData.advanced(by: currentBufferSize)
             memcpy(dest, bytes.advanced(by: packetOffset), packetSize)
@@ -372,6 +404,18 @@ final class StreamingAudioPlayback: @unchecked Sendable {
             return nil
         }
         return timeStamp.mSampleTime / sampleRate
+    }
+
+    fileprivate func queueRunningChanged() {
+        scheduleParseWork { [self] in
+            guard !isTearingDown(), let audioQueue else { return }
+            var running: UInt32 = 0
+            var size = UInt32(MemoryLayout<UInt32>.size)
+            let status = audio.queueGetProperty(audioQueue, kAudioQueueProperty_IsRunning, &running, &size)
+            if status == noErr, running == 0, inputFinished {
+                finish(StreamingPlaybackResult(finished: true, interruptedAt: nil))
+            }
+        }
     }
 }
 
@@ -432,21 +476,12 @@ func outputCallbackProc(
 
 func isRunningCallbackProc(
     inUserData: UnsafeMutableRawPointer?,
-    inAQ: AudioQueueRef,
+    inAQ _: AudioQueueRef,
     inID: AudioQueuePropertyID
 ) {
     guard let inUserData else { return }
     guard inID == kAudioQueueProperty_IsRunning else { return }
 
     let playback = Unmanaged<StreamingAudioPlayback>.fromOpaque(inUserData).takeUnretainedValue()
-    var running: UInt32 = 0
-    var size = UInt32(MemoryLayout<UInt32>.size)
-    let status = playback.audio.queueGetProperty(inAQ, kAudioQueueProperty_IsRunning, &running, &size)
-    if status != noErr {
-        return
-    }
-
-    if running == 0, playback.inputFinished {
-        playback.finish(StreamingPlaybackResult(finished: true, interruptedAt: nil))
-    }
+    playback.queueRunningChanged()
 }
