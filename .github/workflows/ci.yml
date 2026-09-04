@@ -51,3 +51,5 @@ jobs:
         run: (cd Examples/ElevenLabsKitExample && swift build -Xswiftc -warnings-as-errors)
       - name: Swift build CLI example
         run: (cd Examples/ElevenLabsKitCLI && swift build -Xswiftc -warnings-as-errors)
+      - name: CLI argument checks
+        run: ./scripts/check-cli.sh

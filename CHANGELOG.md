@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Reject invalid CLI voice limits and streaming latency tiers before requests, preventing negative voice limits from crashing after a successful voice listing.
+
 ## 0.1.2 — 2026-08-02
 
 - Fix non-streaming output-format selection, provider speed validation, retry cancellation, and replacement of active playback sessions.
