@@ -14,7 +14,7 @@ Add `https://github.com/steipete/ElevenLabsKit.git` in Xcode under **File → Ad
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/steipete/ElevenLabsKit.git", from: "0.1.1"),
+    .package(url: "https://github.com/steipete/ElevenLabsKit.git", from: "0.1.3"),
 ],
 targets: [
     .target(name: "YourApp", dependencies: ["ElevenLabsKit"]),

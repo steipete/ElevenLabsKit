@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.3 — 2026-09-13
+
+**Highlights:** Fix the double-close crash when stopping MP3 playback.
 
 - Fix overlapping MP3 stop and stream completion closing the same parser twice; serialize teardown with parsing and keep callback context alive until native resources are disposed.
 - Reject invalid CLI voice limits and streaming latency tiers before requests, preventing negative voice limits from crashing after a successful voice listing.
