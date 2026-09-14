@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## 0.1.3 — 2026-09-13
 
 **Highlights:** Fix the double-close crash when stopping MP3 playback.
