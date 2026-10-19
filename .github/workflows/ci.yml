@@ -5,38 +5,23 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  MACOSX_DEPLOYMENT_TARGET: '15.0'
+  DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+
 jobs:
   test:
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
-      - name: Select Swift 6.3 Xcode
-        run: |
-          set -euo pipefail
-          LATEST_XCODE="$(
-            while IFS= read -r candidate; do
-              if DEVELOPER_DIR="$candidate/Contents/Developer" xcrun swift --version 2>&1 | grep -qE "Swift version 6\\.3"; then
-                echo "$candidate"
-                break
-              fi
-            done < <(
-              find /Applications -maxdepth 1 \( -type d -o -type l \) \
-                \( -name 'Xcode_*.app' -o -name 'Xcode.app' \) -print | sort -Vr
-            )
-          )"
-          if [[ -z "$LATEST_XCODE" ]]; then
-            echo "No installed Xcode provides Swift 6.3" >&2
-            exit 1
-          fi
-          DEVELOPER_DIR="$LATEST_XCODE/Contents/Developer"
-          echo "Using DEVELOPER_DIR=$DEVELOPER_DIR"
-          sudo xcode-select -s "$DEVELOPER_DIR"
       - name: Toolchain info
         run: |
           xcodebuild -version
           xcrun swift --version
-      - name: Assert Swift 6.3
-        run: xcrun swift --version 2>&1 | grep -E "Swift version 6\\.3"
+      - name: Assert Xcode 27
+        run: |
+          xcode_version=$(xcodebuild -version)
+          [[ "$xcode_version" == Xcode\ 27.* ]]
       - name: Install linters
         run: brew install swiftlint swiftformat
       - name: SwiftFormat
