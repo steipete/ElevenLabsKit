@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Run CI and release verification on Xcode 27, preserving Swift 6.3 and macOS 15 minimums and honoring the selected Xcode in the local release helper.
+
 ## 0.1.3 — 2026-09-13
 
 **Highlights:** Fix the double-close crash when stopping MP3 playback.

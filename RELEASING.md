@@ -26,6 +26,9 @@ the Swift tests on macOS, validates the version and dated notes, then independen
 verifies the source archives on two fresh runners. It creates no tag or release.
 A proof of the already released version still builds current protected `main`.
 `bash scripts/verify-release.sh` is the read-only local macOS build/test helper.
+CI and release verification use `xcode-27` with Xcode 27 and an explicit macOS 15
+deployment target. The local helper honors `DEVELOPER_DIR` or the active Xcode
+selection and requires Swift 6.3 or newer Swift 6.
 
 ## Publish
 

@@ -20,9 +20,13 @@ concurrency:
   group: release-${{ github.repository }}-${{ inputs.version || github.ref_name }}
   cancel-in-progress: false
 
+env:
+  MACOSX_DEPLOYMENT_TARGET: '15.0'
+  DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+
 jobs:
   build:
-    runs-on: macos-26
+    runs-on: xcode-27
     permissions:
       contents: read
     timeout-minutes: 30
