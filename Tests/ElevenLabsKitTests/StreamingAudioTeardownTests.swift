@@ -66,6 +66,21 @@ private final class TeardownProbe: @unchecked Sendable {
         }
     }
 
+    func makeBuffer(byteCapacity: UInt32) -> AudioQueueBufferRef {
+        let buffer = UnsafeMutablePointer<AudioQueueBuffer>.allocate(capacity: 1)
+        let data = UnsafeMutableRawPointer.allocate(byteCount: Int(byteCapacity), alignment: 1)
+        buffer.initialize(to: AudioQueueBuffer(
+            mAudioDataBytesCapacity: byteCapacity,
+            mAudioData: data,
+            mAudioDataByteSize: 0,
+            mUserData: nil,
+            mPacketDescriptionCapacity: 0,
+            mPacketDescriptions: nil,
+            mPacketDescriptionCount: 0
+        ))
+        return buffer
+    }
+
     func audio() -> AudioToolboxClient {
         var audio = AudioToolboxClient.live
         audio.fileStreamOpen = { client, _, _, _, stream in
@@ -198,16 +213,43 @@ private final class TeardownProbe: @unchecked Sendable {
         let waiting = DispatchSemaphore(value: 0)
         let stopped = DispatchSemaphore(value: 0)
         let closed = DispatchSemaphore(value: 0)
+        let enqueued = OSAllocatedUnfairLock(initialState: 0)
+        let started = OSAllocatedUnfairLock(initialState: false)
+        let queueBufferBytes = 32 * 1024
         var audio = probe.audio()
-        audio.fileStreamParseBytes = { _, count, data, _ in
-            guard let client = probe.client(), let data else { return -1 }
+        audio.queueAllocateBuffer = { _, size, outBuffer in
+            outBuffer.pointee = probe.makeBuffer(byteCapacity: size)
+            return noErr
+        }
+        audio.queueEnqueueBuffer = { _, _, _, _ in
+            let count = enqueued.withLock { value in
+                value += 1
+                return value
+            }
+            if count == 3 {
+                waiting.signal()
+            }
+            return noErr
+        }
+        audio.queueStart = { _, _ in
+            started.withLock { $0 = true }
+            return noErr
+        }
+        audio.fileStreamParseBytes = { _, _, _, _ in
+            guard let client = probe.client() else { return -1 }
             let playback = Unmanaged<StreamingAudioPlayback>.fromOpaque(client).takeUnretainedValue()
+            let packet = [UInt8](repeating: 0x11, count: queueBufferBytes)
             probe.setParsing(true)
-            for index in 0..<4 {
-                if index == 3 {
-                    waiting.signal()
+            packet.withUnsafeBytes { raw in
+                guard let base = raw.baseAddress else { return }
+                for _ in 0..<4 {
+                    playback.handlePackets(
+                        numberBytes: UInt32(packet.count),
+                        numberPackets: 1,
+                        inputData: base,
+                        packetDescriptions: nil
+                    )
                 }
-                playback.handlePackets(numberBytes: count, numberPackets: 1, inputData: data, packetDescriptions: nil)
             }
             probe.setParsing(false)
             return noErr
@@ -232,6 +274,8 @@ private final class TeardownProbe: @unchecked Sendable {
         #expect(probe.snapshot().closes == 1)
         #expect(!probe.snapshot().unsafeClose)
         #expect(!probe.snapshot().unsafeStop)
+        #expect(started.withLock { $0 })
+        #expect(enqueued.withLock { $0 } == 3)
     }
 
     @Test func `queue callback defers disposal until the callback returns`() throws {

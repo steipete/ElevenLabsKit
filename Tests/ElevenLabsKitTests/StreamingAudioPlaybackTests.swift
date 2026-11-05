@@ -260,6 +260,10 @@ import Testing
 
     @Test func `finish unblocks pending buffer waiters`() {
         let done = DispatchSemaphore(value: 0)
+        let buffers = BufferStore()
+        let enqueueCount = OSAllocatedUnfairLock(initialState: 0)
+        let startCalled = Flag()
+        let queueBufferBytes = 32 * 1024
 
         let audio = AudioToolboxClient(
             fileStreamOpen: { _, _, _, _, outStream in
@@ -279,9 +283,15 @@ import Testing
                 return noErr
             },
             queueAddPropertyListener: { _, _, _, _ in noErr },
-            queueAllocateBuffer: { _, _, _ in noErr },
-            queueEnqueueBuffer: { _, _, _, _ in noErr },
-            queueStart: { _, _ in noErr },
+            queueAllocateBuffer: { _, size, outBuffer in
+                outBuffer.pointee = buffers.makeBuffer(byteCapacity: size)
+                return noErr
+            },
+            queueEnqueueBuffer: { _, _, _, _ in
+                enqueueCount.withLock { $0 += 1 }
+                return noErr
+            },
+            queueStart: { _, _ in startCalled.set(); return noErr },
             queueStop: { _, _ in noErr },
             queueDispose: { _, _ in noErr },
             queueSetProperty: { _, _, _, _ in noErr },
@@ -299,7 +309,7 @@ import Testing
         format.mSampleRate = 44100
         playback.setupQueueIfNeeded(format)
 
-        let bytes = [UInt8](repeating: 0x11, count: 16)
+        let bytes = [UInt8](repeating: 0x11, count: queueBufferBytes)
         bytes.withUnsafeBytes { raw in
             guard let base = raw.baseAddress else { return }
             for _ in 0..<3 {
@@ -330,6 +340,8 @@ import Testing
 
         let result = done.wait(timeout: .now() + 1)
         #expect(result == .success)
+        #expect(startCalled.get())
+        #expect(enqueueCount.withLock { $0 } == 3)
     }
 
     @Test func `stop returns nil when sample time is na N`() {
