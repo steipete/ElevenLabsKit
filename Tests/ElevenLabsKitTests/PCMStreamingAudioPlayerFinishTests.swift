@@ -11,9 +11,13 @@ private final class FakePCMPlayerNodeForFinish: PCMPlayerNodeing {
     func attach(to _: AVAudioEngine) {}
     func connect(to _: AVAudioEngine, format _: AVAudioFormat) {}
 
-    func scheduleBuffer(_ buffer: AVAudioPCMBuffer) async {
+    func scheduleBuffer(
+        _ buffer: AVAudioPCMBuffer,
+        completionCallbackType: AVAudioPlayerNodeCompletionCallbackType,
+        completionHandler: @escaping @Sendable (AVAudioPlayerNodeCompletionCallbackType) -> Void
+    ) {
         scheduledBuffers.append(buffer)
-        await Task.yield()
+        completionHandler(completionCallbackType)
     }
 
     func play() {
