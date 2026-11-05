@@ -195,6 +195,69 @@ import Testing
         #expect(stopCalled.get())
     }
 
+    @Test func `missing audio buffers finish playback instead of waiting`() {
+        let disposeCalled = Flag()
+        let finished = DispatchSemaphore(value: 0)
+
+        let audio = AudioToolboxClient(
+            fileStreamOpen: { _, _, _, _, outStream in
+                outStream.pointee = OpaquePointer(bitPattern: 0x1)
+                return noErr
+            },
+            fileStreamParseBytes: { _, _, _, _ in noErr },
+            fileStreamGetPropertyInfo: { _, _, outSize, outWritable in
+                outSize.pointee = 0
+                outWritable.pointee = false
+                return noErr
+            },
+            fileStreamGetProperty: { _, _, _, _ in noErr },
+            fileStreamClose: { _ in noErr },
+            queueNewOutput: { _, _, _, _, _, _, outQueue in
+                outQueue.pointee = OpaquePointer(bitPattern: 0x2)
+                return noErr
+            },
+            queueAddPropertyListener: { _, _, _, _ in noErr },
+            queueAllocateBuffer: { _, _, outBuffer in
+                outBuffer.pointee = nil
+                return -1
+            },
+            queueEnqueueBuffer: { _, _, _, _ in noErr },
+            queueStart: { _, _ in noErr },
+            queueStop: { _, _ in noErr },
+            queueDispose: { _, _ in disposeCalled.set(); return noErr },
+            queueSetProperty: { _, _, _, _ in noErr },
+            queueGetCurrentTime: { _, _, _, _ in noErr },
+            queueGetProperty: { _, _, _, _ in noErr }
+        )
+
+        let playback = StreamingAudioPlayback(
+            logger: Logger(subsystem: "test", category: "stream"),
+            audio: audio,
+            scheduleParseWork: { $0() }
+        )
+        playback.start()
+        var format = AudioStreamBasicDescription()
+        format.mSampleRate = 44100
+        playback.setupQueueIfNeeded(format)
+
+        DispatchQueue.global().async {
+            let bytes = [UInt8](repeating: 0x11, count: 8)
+            bytes.withUnsafeBytes { raw in
+                playback.handlePackets(
+                    numberBytes: UInt32(raw.count),
+                    numberPackets: 1,
+                    inputData: raw.baseAddress!,
+                    packetDescriptions: nil
+                )
+            }
+            finished.signal()
+        }
+
+        let timedOut = finished.wait(timeout: .now() + .milliseconds(500)) == .timedOut
+        #expect(!timedOut)
+        #expect(disposeCalled.get())
+    }
+
     @Test func `finish unblocks pending buffer waiters`() {
         let done = DispatchSemaphore(value: 0)
 
