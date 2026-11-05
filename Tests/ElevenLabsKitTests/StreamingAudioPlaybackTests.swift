@@ -312,7 +312,7 @@ import Testing
         let bytes = [UInt8](repeating: 0x11, count: queueBufferBytes)
         bytes.withUnsafeBytes { raw in
             guard let base = raw.baseAddress else { return }
-            for _ in 0..<3 {
+            for _ in 0..<6 {
                 playback.handlePackets(
                     numberBytes: UInt32(raw.count),
                     numberPackets: 1,
@@ -322,15 +322,18 @@ import Testing
             }
         }
 
+        let blockedFor = OSAllocatedUnfairLock(initialState: 0.0)
         DispatchQueue.global().async {
             bytes.withUnsafeBytes { raw in
                 guard let base = raw.baseAddress else { return }
+                let started = Date()
                 playback.handlePackets(
                     numberBytes: UInt32(raw.count),
                     numberPackets: 1,
                     inputData: base,
                     packetDescriptions: nil
                 )
+                blockedFor.withLock { $0 = Date().timeIntervalSince(started) }
             }
             done.signal()
         }
@@ -342,6 +345,7 @@ import Testing
         #expect(result == .success)
         #expect(startCalled.get())
         #expect(enqueueCount.withLock { $0 } == 3)
+        #expect(blockedFor.withLock { $0 } > 0.04)
     }
 
     @Test func `stop returns nil when sample time is na N`() {

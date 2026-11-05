@@ -216,19 +216,14 @@ private final class TeardownProbe: @unchecked Sendable {
         let enqueued = OSAllocatedUnfairLock(initialState: 0)
         let started = OSAllocatedUnfairLock(initialState: false)
         let queueBufferBytes = 32 * 1024
+        let blockedFor = OSAllocatedUnfairLock(initialState: 0.0)
         var audio = probe.audio()
         audio.queueAllocateBuffer = { _, size, outBuffer in
             outBuffer.pointee = probe.makeBuffer(byteCapacity: size)
             return noErr
         }
         audio.queueEnqueueBuffer = { _, _, _, _ in
-            let count = enqueued.withLock { value in
-                value += 1
-                return value
-            }
-            if count == 3 {
-                waiting.signal()
-            }
+            enqueued.withLock { $0 += 1 }
             return noErr
         }
         audio.queueStart = { _, _ in
@@ -242,7 +237,7 @@ private final class TeardownProbe: @unchecked Sendable {
             probe.setParsing(true)
             packet.withUnsafeBytes { raw in
                 guard let base = raw.baseAddress else { return }
-                for _ in 0..<4 {
+                for _ in 0..<6 {
                     playback.handlePackets(
                         numberBytes: UInt32(packet.count),
                         numberPackets: 1,
@@ -250,6 +245,15 @@ private final class TeardownProbe: @unchecked Sendable {
                         packetDescriptions: nil
                     )
                 }
+                waiting.signal()
+                let blockedAt = Date()
+                playback.handlePackets(
+                    numberBytes: UInt32(packet.count),
+                    numberPackets: 1,
+                    inputData: base,
+                    packetDescriptions: nil
+                )
+                blockedFor.withLock { $0 = Date().timeIntervalSince(blockedAt) }
             }
             probe.setParsing(false)
             return noErr
@@ -263,6 +267,7 @@ private final class TeardownProbe: @unchecked Sendable {
         playback.append(Data([0]))
         defer { playback.finish(StreamingPlaybackResult(finished: false, interruptedAt: nil)) }
         try #require(waiting.wait(timeout: .now() + 1) == .success)
+        Thread.sleep(forTimeInterval: 0.05)
 
         DispatchQueue.global().async {
             _ = playback.stop(immediate: true)
@@ -276,6 +281,7 @@ private final class TeardownProbe: @unchecked Sendable {
         #expect(!probe.snapshot().unsafeStop)
         #expect(started.withLock { $0 })
         #expect(enqueued.withLock { $0 } == 3)
+        #expect(blockedFor.withLock { $0 } > 0.04)
     }
 
     @Test func `queue callback defers disposal until the callback returns`() throws {
