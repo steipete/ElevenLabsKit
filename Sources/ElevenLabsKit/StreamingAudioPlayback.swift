@@ -185,6 +185,21 @@ final class StreamingAudioPlayback: @unchecked Sendable {
         }
     }
 
+    private func waitForReturnedBuffer() -> Bool {
+        guard !isTearingDown() else { return false }
+        guard startRequested else {
+            fail(NSError(
+                domain: "StreamingAudio",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "audio queue produced no buffer callback"]
+            ))
+            return false
+        }
+        guard recordBufferWait() else { return false }
+        bufferSemaphore.wait()
+        return !isTearingDown()
+    }
+
     private func recordBufferWait() -> Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -287,14 +302,17 @@ final class StreamingAudioPlayback: @unchecked Sendable {
         }
         if status != noErr {
             logger.error("talk queue enqueue failed: \(status)")
-        } else {
-            if !startRequested {
-                startRequested = true
-                let startStatus = audio.queueStart(audioQueue, nil)
-                if startStatus != noErr {
-                    logger.error("talk queue start failed: \(startStatus)")
-                }
+            fail(NSError(domain: "StreamingAudio", code: Int(status)))
+            return
+        }
+        if !startRequested {
+            let startStatus = audio.queueStart(audioQueue, nil)
+            if startStatus != noErr {
+                logger.error("talk queue start failed: \(startStatus)")
+                fail(NSError(domain: "StreamingAudio", code: Int(startStatus)))
+                return
             }
+            startRequested = true
         }
 
         currentBuffer = nil
@@ -306,10 +324,7 @@ final class StreamingAudioPlayback: @unchecked Sendable {
             var next = availableBuffers.popLast()
             bufferLock.unlock()
             if next == nil {
-                guard !isTearingDown() else { return }
-                guard recordBufferWait() else { return }
-                bufferSemaphore.wait()
-                guard !isTearingDown() else { return }
+                guard waitForReturnedBuffer() else { return }
                 bufferLock.lock()
                 next = availableBuffers.popLast()
                 bufferLock.unlock()
@@ -342,10 +357,7 @@ final class StreamingAudioPlayback: @unchecked Sendable {
             currentBuffer = availableBuffers.popLast()
             bufferLock.unlock()
             if currentBuffer == nil {
-                guard !isTearingDown() else { return }
-                guard recordBufferWait() else { return }
-                bufferSemaphore.wait()
-                guard !isTearingDown() else { return }
+                guard waitForReturnedBuffer() else { return }
                 bufferLock.lock()
                 currentBuffer = availableBuffers.popLast()
                 bufferLock.unlock()
