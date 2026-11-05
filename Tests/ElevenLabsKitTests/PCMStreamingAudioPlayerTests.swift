@@ -9,19 +9,23 @@ private final class FakePCMPlayerNode: PCMPlayerNodeing {
     var scheduledBuffers: [AVAudioPCMBuffer] = []
     var onSchedule: (() -> Void)?
     var suspendScheduling = false
-    var scheduleContinuations: [CheckedContinuation<Void, Never>] = []
+    var scheduleHandlers: [@Sendable (AVAudioPlayerNodeCompletionCallbackType) -> Void] = []
 
     func attach(to _: AVAudioEngine) {}
     func connect(to _: AVAudioEngine, format _: AVAudioFormat) {}
 
-    func scheduleBuffer(_ buffer: AVAudioPCMBuffer) async {
+    func scheduleBuffer(
+        _ buffer: AVAudioPCMBuffer,
+        completionCallbackType: AVAudioPlayerNodeCompletionCallbackType,
+        completionHandler: @escaping @Sendable (AVAudioPlayerNodeCompletionCallbackType) -> Void
+    ) {
         scheduledBuffers.append(buffer)
         onSchedule?()
         if suspendScheduling {
-            await withCheckedContinuation { continuation in
-                scheduleContinuations.append(continuation)
-            }
+            scheduleHandlers.append(completionHandler)
+            return
         }
+        completionHandler(completionCallbackType)
     }
 
     func play() {
@@ -37,8 +41,8 @@ private final class FakePCMPlayerNode: PCMPlayerNodeing {
     }
 
     func resumeNextSchedule() {
-        guard scheduleContinuations.isEmpty == false else { return }
-        scheduleContinuations.removeFirst().resume()
+        guard scheduleHandlers.isEmpty == false else { return }
+        scheduleHandlers.removeFirst()(.dataPlayedBack)
     }
 }
 
@@ -143,7 +147,7 @@ final class PCMStreamingAudioPlayerTests {
         let firstTask = Task { @MainActor in
             await player.play(stream: firstStream, sampleRate: 44100)
         }
-        for _ in 0..<10 where fakePlayer.scheduleContinuations.count < 1 {
+        for _ in 0..<10 where fakePlayer.scheduleHandlers.count < 1 {
             await Task.yield()
         }
 
@@ -157,7 +161,7 @@ final class PCMStreamingAudioPlayerTests {
             secondCompleted = true
             return result
         }
-        for _ in 0..<10 where fakePlayer.scheduleContinuations.count < 2 {
+        for _ in 0..<10 where fakePlayer.scheduleHandlers.count < 2 {
             await Task.yield()
         }
 

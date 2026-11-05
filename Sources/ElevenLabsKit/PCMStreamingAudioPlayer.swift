@@ -113,8 +113,7 @@ public final class PCMStreamingAudioPlayer {
     private func enqueuePCM(_ data: Data, format: AVAudioFormat, generation: Int) async {
         guard !data.isEmpty else { return }
         let frameCount = data.count / MemoryLayout<Int16>.size
-        guard frameCount > 0 else { return }
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount)) else {
+        guard frameCount > 0, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount)) else {
             return
         }
         buffer.frameLength = AVAudioFrameCount(frameCount)
@@ -127,28 +126,41 @@ public final class PCMStreamingAudioPlayer {
             }
         }
 
-        pendingBuffers += 1
-        let scheduledPlayer = player
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            await beforeSchedulingBuffer()
-            guard playbackGeneration == generation else { return }
-            await scheduledPlayer.scheduleBuffer(buffer)
-            guard playbackGeneration == generation else { return }
-            pendingBuffers = max(0, pendingBuffers - 1)
-            if inputFinished, pendingBuffers == 0 {
-                finish(StreamingPlaybackResult(finished: true, interruptedAt: nil))
-            }
-        }
+        await beforeSchedulingBuffer()
+        guard playbackGeneration == generation else { return }
 
-        if !player.isPlaying {
+        if player.isPlaying == false {
             do {
                 try startEngine(engine)
-                player.play()
             } catch {
                 logger.error("pcm engine start failed: \(error.localizedDescription, privacy: .public)")
                 fail(error)
+                return
             }
+            guard playbackGeneration == generation else { return }
+        }
+
+        pendingBuffers += 1
+        player.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] callbackType in
+            Task { @MainActor in
+                self?.completeScheduledBuffer(callbackType, generation: generation)
+            }
+        }
+        guard playbackGeneration == generation else { return }
+        if player.isPlaying == false {
+            player.play()
+        }
+    }
+
+    /// `dataConsumed` means the buffer was queued, not that the samples finished playing.
+    private func completeScheduledBuffer(
+        _ callbackType: AVAudioPlayerNodeCompletionCallbackType,
+        generation: Int
+    ) {
+        guard playbackGeneration == generation, callbackType == .dataPlayedBack else { return }
+        pendingBuffers = max(0, pendingBuffers - 1)
+        if inputFinished, pendingBuffers == 0 {
+            finish(StreamingPlaybackResult(finished: true, interruptedAt: nil))
         }
     }
 
