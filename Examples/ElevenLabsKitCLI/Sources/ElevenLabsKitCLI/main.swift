@@ -283,9 +283,21 @@ private func formatSeconds(_ value: Double?) -> String {
     return String(format: "%.2fs", value)
 }
 
-private func writeFile(data: Data, path: String) throws {
+private func writeFile(data: Data, path: String, outputFormat: String?) throws {
+    let payload = wavPayloadIfNeeded(data, path: path, outputFormat: outputFormat)
     let url = URL(fileURLWithPath: path)
-    try data.write(to: url, options: [.atomic])
+    try payload.write(to: url, options: [.atomic])
+}
+
+private func wavPayloadIfNeeded(_ data: Data, path: String, outputFormat: String?) -> Data {
+    guard let rate = wavSampleRate(path: path, outputFormat: outputFormat) else { return data }
+    return WAVPCM.file(pcm: data, sampleRate: rate)
+}
+
+private func wavSampleRate(path: String, outputFormat: String?) -> Int? {
+    guard path.lowercased().hasSuffix(".wav") else { return nil }
+    guard let rate = TalkTTSValidation.pcmSampleRate(from: outputFormat) else { return nil }
+    return Int(rate)
 }
 
 private struct PlaybackOptions {
@@ -306,7 +318,7 @@ private func fetchAndMaybePlay(
     let data = try await client.synthesize(voiceId: options.voiceId, request: request)
     let requestSeconds = seconds(from: clock, since: start)
     if let outputPath = options.outputPath {
-        try writeFile(data: data, path: outputPath)
+        try writeFile(data: data, path: outputPath, outputFormat: request.outputFormat)
     }
     guard options.play else { return }
 
@@ -352,7 +364,9 @@ private func streamAndMaybePlay(
     let streamMetrics = options.metrics ? StreamMetrics() : nil
 
     let stream = client.streamSynthesize(voiceId: options.voiceId, request: request)
-    let outputSink = try options.outputPath.map { try FileSink(path: $0) }
+    let outputSink = try options.outputPath.map {
+        try FileSink(path: $0, pcmSampleRate: wavSampleRate(path: $0, outputFormat: request.outputFormat))
+    }
 
     if options.play == false {
         try await drain(stream: stream, sink: outputSink, metrics: streamMetrics, start: start, clock: clock)
@@ -616,21 +630,32 @@ private func printStreamMetrics(_ metrics: StreamMetricsSnapshot) {
 
 private actor FileSink {
     private let handle: FileHandle
+    private let pcmSampleRate: Int?
+    private var pcmBytes = 0
 
-    init(path: String) throws {
+    init(path: String, pcmSampleRate: Int?) throws {
         let url = URL(fileURLWithPath: path)
         if FileManager.default.fileExists(atPath: url.path) == false {
             FileManager.default.createFile(atPath: url.path, contents: nil)
         }
         self.handle = try FileHandle(forWritingTo: url)
         try handle.truncate(atOffset: 0)
+        self.pcmSampleRate = pcmSampleRate
+        if let pcmSampleRate {
+            try handle.write(contentsOf: WAVPCM.header(dataBytes: 0, sampleRate: pcmSampleRate))
+        }
     }
 
     func write(_ data: Data) {
+        pcmBytes += data.count
         try? handle.write(contentsOf: data)
     }
 
     func close() {
+        if let pcmSampleRate {
+            try? handle.seek(toOffset: 0)
+            try? handle.write(contentsOf: WAVPCM.header(dataBytes: pcmBytes, sampleRate: pcmSampleRate))
+        }
         try? handle.close()
     }
 }
