@@ -203,12 +203,8 @@ private final class TeardownProbe: @unchecked Sendable {
             guard let client = probe.client(), let data else { return -1 }
             let playback = Unmanaged<StreamingAudioPlayback>.fromOpaque(client).takeUnretainedValue()
             probe.setParsing(true)
-            for index in 0..<4 {
-                if index == 3 {
-                    waiting.signal()
-                }
-                playback.handlePackets(numberBytes: count, numberPackets: 1, inputData: data, packetDescriptions: nil)
-            }
+            waiting.signal()
+            playback.handlePackets(numberBytes: count, numberPackets: 1, inputData: data, packetDescriptions: nil)
             probe.setParsing(false)
             return noErr
         }

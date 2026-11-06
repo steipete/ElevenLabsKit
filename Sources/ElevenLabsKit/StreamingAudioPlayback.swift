@@ -13,7 +13,7 @@ final class StreamingAudioPlayback: @unchecked Sendable {
     private let parseQueue: DispatchQueue?
     private let parseQueueKey = DispatchSpecificKey<Bool>()
     fileprivate let bufferLock = NSLock()
-    fileprivate let bufferSemaphore = DispatchSemaphore(value: bufferCount)
+    fileprivate let bufferSemaphore = DispatchSemaphore(value: 0)
 
     private var continuation: CheckedContinuation<StreamingPlaybackResult, Never>?
     private var finished = false
