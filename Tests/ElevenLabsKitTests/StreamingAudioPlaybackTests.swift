@@ -237,18 +237,6 @@ import Testing
         playback.setupQueueIfNeeded(format)
 
         let bytes = [UInt8](repeating: 0x11, count: 16)
-        bytes.withUnsafeBytes { raw in
-            guard let base = raw.baseAddress else { return }
-            for _ in 0..<3 {
-                playback.handlePackets(
-                    numberBytes: UInt32(raw.count),
-                    numberPackets: 1,
-                    inputData: base,
-                    packetDescriptions: nil
-                )
-            }
-        }
-
         DispatchQueue.global().async {
             bytes.withUnsafeBytes { raw in
                 guard let base = raw.baseAddress else { return }
@@ -262,7 +250,8 @@ import Testing
             done.signal()
         }
 
-        Thread.sleep(forTimeInterval: 0.05)
+        let stillWaiting = done.wait(timeout: .now() + 0.05)
+        #expect(stillWaiting == .timedOut)
         playback.finish(StreamingPlaybackResult(finished: false, interruptedAt: nil))
 
         let result = done.wait(timeout: .now() + 1)
