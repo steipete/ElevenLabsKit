@@ -455,29 +455,12 @@ private enum AudioKind: String {
     case unknown
 
     static func detect(from data: Data, requestedOutput: String) -> AudioKind {
-        if data.count >= 12,
-           data.prefix(4) == Data([0x52, 0x49, 0x46, 0x46]),
-           data.dropFirst(8).prefix(4) == Data([0x57, 0x41, 0x56, 0x45])
-        {
-            return .wav
+        switch AudioPayloadKind.detect(from: data, requestedOutput: requestedOutput) {
+        case .wav: .wav
+        case .mp3: .mp3
+        case .pcm: .pcm
+        case .unknown: .unknown
         }
-
-        if data.count >= 3, data.prefix(3) == Data([0x49, 0x44, 0x33]) {
-            return .mp3
-        }
-
-        if data.count >= 2 {
-            let bytes = [UInt8](data.prefix(2))
-            if bytes[0] == 0xFF, (bytes[1] & 0xE0) == 0xE0 {
-                return .mp3
-            }
-        }
-
-        if requestedOutput.lowercased().hasPrefix("pcm_") {
-            return .pcm
-        }
-
-        return .unknown
     }
 }
 
