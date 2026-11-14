@@ -22,8 +22,10 @@ jobs:
         run: |
           xcode_version=$(xcodebuild -version)
           [[ "$xcode_version" == Xcode\ 27.* ]]
-      - name: Install linters
-        run: brew install swiftlint swiftformat
+      - name: Install pinned linters
+        run: |
+          bash scripts/install-linters.sh "$RUNNER_TEMP/elevenlabskit-linters"
+          echo "$RUNNER_TEMP/elevenlabskit-linters" >> "$GITHUB_PATH"
       - name: SwiftFormat
         run: swiftformat Sources Tests Examples --lint
       - name: SwiftLint

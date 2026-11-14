@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Pin CI and local lint tooling to checksum-verified SwiftFormat 0.63.1 and SwiftLint 0.65.1 so upstream rule changes cannot break unchanged code.
+
 - Run CI and release verification on Xcode 27, preserving Swift 6.3 and macOS 15 minimums and honoring the selected Xcode in the local release helper.
 
 ## 0.1.3 — 2026-09-13
