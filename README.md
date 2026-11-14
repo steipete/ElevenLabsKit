@@ -96,7 +96,11 @@ Speech and voice-list commands require `ELEVENLABS_API_KEY` or `--api-key`.
 
 ## Development
 
+On macOS, install the same checksum-verified SwiftFormat 0.63.1 and SwiftLint 0.65.1 used by CI. Versions and archive checksums live in `scripts/install-linters.sh`; update them together after validating both lint configurations.
+
 ```sh
+bash scripts/install-linters.sh
+export PATH="$PWD/.build/linters:$PATH"
 swift test
 swiftformat Sources Tests Examples --lint
 swiftlint lint --strict --config .swiftlint.yml
